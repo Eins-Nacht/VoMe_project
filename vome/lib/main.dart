@@ -1,12 +1,20 @@
 import 'package:flutter/material.dart';
 
+import 'models/recording.dart';
 import 'screens/history_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/recording_detail_screen.dart';
 import 'screens/recording_screen.dart';
 import 'screens/upload_screen.dart';
+import 'services/audio_storage_service.dart';
+import 'services/database_service.dart';
+import 'services/recording_repository.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await DatabaseService.instance.init();
+  await AudioStorageService.instance.init();
   runApp(const AudiaryApp());
 }
 
@@ -31,8 +39,6 @@ class AudiaryApp extends StatelessWidget {
   }
 }
 
-/// Call from [LoginScreen] after auth succeeds:
-/// `AudiaryScope.of(context).signIn(username: email);`
 class AudiaryScope extends InheritedWidget {
   const AudiaryScope({
     super.key,
@@ -52,7 +58,7 @@ class AudiaryScope extends InheritedWidget {
   bool updateShouldNotify(AudiaryScope oldWidget) => false;
 }
 
-enum _AppScreen { login, home, recording }
+enum _AppScreen { login, home, recording, detail }
 
 class AppRoot extends StatefulWidget {
   const AppRoot({super.key});
@@ -67,35 +73,38 @@ class _AppRootState extends State<AppRoot> {
   int _navIndex = 0;
   String _username = 'Alex';
 
-  int _recordingsThisWeek = 3;
-  Duration _totalRecordingTime = const Duration(hours: 3, minutes: 27);
+  int _recordingsThisWeek = 0;
+  Duration _totalRecordingTime = Duration.zero;
+  List<Recording> _recentRecordings = [];
+  Recording? _selectedRecording;
+  Key _historyRefreshKey = UniqueKey();
 
-  List<SummaryItem> _recentSummaries = const [
-    SummaryItem(
-      title: 'Weekly Eng Sync',
-      type: 'Meeting',
-      status: 'Pending',
-      mood: 'Positive',
-      date: '4 Aug 2026',
-      duration: '48 min',
-    ),
-    SummaryItem(
-      title: 'ML Lecture — Transformers',
-      type: 'Lecture',
-      status: 'No Action',
-      mood: 'Neutral',
-      date: '3 Aug 2026',
-      duration: '1h 12min',
-    ),
-    SummaryItem(
-      title: 'Product Strategy Call',
-      type: 'Meeting',
-      status: 'Completed',
-      mood: 'Positive',
-      date: '1 Aug 2026',
-      duration: '35 min',
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _loadDashboardData();
+  }
+
+  Future<void> _loadDashboardData() async {
+    final count = await RecordingRepository.instance.countRecordingsThisWeek();
+    final totalDuration = await RecordingRepository.instance.totalDurationThisWeek();
+    final recent = await RecordingRepository.instance.getRecentRecordings(limit: 10);
+
+    if (mounted) {
+      setState(() {
+        _recordingsThisWeek = count;
+        _totalRecordingTime = totalDuration;
+        _recentRecordings = recent;
+      });
+    }
+  }
+
+  void _refreshData() {
+    _loadDashboardData();
+    setState(() {
+      _historyRefreshKey = UniqueKey();
+    });
+  }
 
   void _signIn({String? username}) {
     setState(() {
@@ -105,6 +114,7 @@ class _AppRootState extends State<AppRoot> {
       }
       _screen = _AppScreen.home;
     });
+    _loadDashboardData();
   }
 
   void _openRecording() {
@@ -119,29 +129,29 @@ class _AppRootState extends State<AppRoot> {
     setState(() => _navIndex = index);
   }
 
-  void _onRecordingComplete({
-    required String title,
-    required String eventType,
-    required Duration duration,
-  }) {
+  void _openRecordingDetail(Recording recording) {
     setState(() {
-      _recordingsThisWeek += 1;
-      _totalRecordingTime += duration;
+      _selectedRecording = recording;
+      _screen = _AppScreen.detail;
+    });
+  }
 
-      _recentSummaries = [
-        SummaryItem(
-          title: title.isEmpty ? 'Untitled Recording' : title,
-          type: eventType,
-          status: 'Pending',
-          mood: 'Neutral',
-          date: _formatDate(DateTime.now()),
-          duration: _formatRecordingDuration(duration),
-        ),
-        ..._recentSummaries,
-      ];
-
+  void _closeRecordingDetail() {
+    setState(() {
+      _selectedRecording = null;
       _screen = _AppScreen.home;
     });
+    _refreshData();
+  }
+
+  void _onRecordingComplete(Recording recording) {
+    _refreshData();
+    setState(() => _screen = _AppScreen.home);
+  }
+
+  void _onUploadComplete(Recording recording) {
+    _refreshData();
+    setState(() => _navIndex = 0);
   }
 
   @override
@@ -154,22 +164,28 @@ class _AppRootState extends State<AppRoot> {
             onBack: _closeRecording,
             onRecordingComplete: _onRecordingComplete,
           ),
+        _AppScreen.detail when _selectedRecording != null => RecordingDetailScreen(
+            recording: _selectedRecording!,
+            onBack: _closeRecordingDetail,
+            onDeleted: _closeRecordingDetail,
+          ),
         _AppScreen.home => switch (_navIndex) {
             1 => HistoryScreen(
+                key: _historyRefreshKey,
+                refreshKey: _historyRefreshKey,
                 currentIndex: _navIndex,
                 onHomeTap: () => _onNavigationTap(0),
                 onHistoryTap: () => _onNavigationTap(1),
                 onUploadTap: () => _onNavigationTap(2),
                 onProfileTap: () => _onNavigationTap(3),
-                onRecordingTap: (_) {
-                  // TODO: open summary detail
-                },
+                onRecordingTap: _openRecordingDetail,
               ),
             2 => UploadScreen(
                 onHomeTap: () => _onNavigationTap(0),
                 onHistoryTap: () => _onNavigationTap(1),
                 onUploadTap: () => _onNavigationTap(2),
                 onProfileTap: () => _onNavigationTap(3),
+                onUploadComplete: _onUploadComplete,
               ),
             3 => _ProfileTab(
                 currentIndex: _navIndex,
@@ -179,47 +195,25 @@ class _AppRootState extends State<AppRoot> {
                 username: _username,
                 recordingsThisWeek: _recordingsThisWeek,
                 totalRecordingTime: _totalRecordingTime,
-                recentSummaries: _recentSummaries,
+                recentRecordings: _recentRecordings,
                 currentIndex: _navIndex,
                 onNewRecording: _openRecording,
-                onSummaryTap: (_) {
-                  // TODO: open summary detail
-                },
+                onSummaryTap: _openRecordingDetail,
                 onNavigationTap: _onNavigationTap,
               ),
           },
+        _ => HomeScreen(
+            username: _username,
+            recordingsThisWeek: _recordingsThisWeek,
+            totalRecordingTime: _totalRecordingTime,
+            recentRecordings: _recentRecordings,
+            currentIndex: _navIndex,
+            onNewRecording: _openRecording,
+            onSummaryTap: _openRecordingDetail,
+            onNavigationTap: _onNavigationTap,
+          ),
       },
     );
-  }
-
-  static String _formatDate(DateTime date) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-
-    return '${date.day} ${months[date.month - 1]} ${date.year}';
-  }
-
-  static String _formatRecordingDuration(Duration duration) {
-    final hours = duration.inHours;
-    final minutes = duration.inMinutes.remainder(60);
-
-    if (hours > 0) {
-      return '${hours}h ${minutes}min';
-    }
-
-    return '${minutes} min';
   }
 }
 
@@ -322,7 +316,6 @@ class _AppBottomNavigation extends StatelessWidget {
   }
 }
 
-/// Bridges [LoginScreen] to [AppRoot] until login_screen exposes an onSignIn callback.
 class _LoginPage extends StatelessWidget {
   const _LoginPage();
 

@@ -1,12 +1,15 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+import '../models/recording.dart';
+import '../services/recording_repository.dart';
+
 class UploadScreen extends StatefulWidget {
-  // Bottom navigation callbacks
   final VoidCallback? onHomeTap;
   final VoidCallback? onHistoryTap;
   final VoidCallback? onUploadTap;
   final VoidCallback? onProfileTap;
+  final void Function(Recording recording)? onUploadComplete;
 
   const UploadScreen({
     super.key,
@@ -14,6 +17,7 @@ class UploadScreen extends StatefulWidget {
     this.onHistoryTap,
     this.onUploadTap,
     this.onProfileTap,
+    this.onUploadComplete,
   });
 
   @override
@@ -53,6 +57,7 @@ class _UploadScreenState extends State<UploadScreen> {
   // ============================================================
 
   bool _isPickingFile = false;
+  bool _isSaving = false;
 
   // ============================================================
   // DISPOSE
@@ -203,47 +208,58 @@ class _UploadScreenState extends State<UploadScreen> {
   // CREATE SUMMARY
   // ============================================================
 
-  void _createSummary() {
-    if (!_canCreateSummary) {
+  Future<void> _createSummary() async {
+    if (!_canCreateSummary || _isSaving) {
       return;
     }
 
-    final String title = _titleController.text.trim();
+    final title = _titleController.text.trim();
+    final eventType = _selectedType!;
+    final file = _selectedFile!;
 
-    final String eventType = _selectedType!;
+    if (file.path == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to access the selected file path.')),
+      );
+      return;
+    }
 
-    final PlatformFile file = _selectedFile!;
+    setState(() => _isSaving = true);
 
-    // ----------------------------------------------------------
-    // TODO:
-    //
-    // ตรงนี้เอาไว้เชื่อม FastAPI ในภายหลัง
-    //
-    // file.path
-    // title
-    // eventType
-    //
-    // ----------------------------------------------------------
+    try {
+      final recording = await RecordingRepository.instance.saveUploadedAudio(
+        sourcePath: file.path!,
+        originalFilename: file.name,
+        title: title,
+        eventType: eventType,
+        duration: Duration.zero,
+      );
 
-    debugPrint('================================');
+      if (!mounted) {
+        return;
+      }
 
-    debugPrint('CREATE SUMMARY');
+      setState(() {
+        _selectedFile = null;
+        _titleController.clear();
+        _selectedType = null;
+        _isSaving = false;
+      });
 
-    debugPrint('Title: $title');
+      widget.onUploadComplete?.call(recording);
 
-    debugPrint('Event Type: $eventType');
-
-    debugPrint('File Name: ${file.name}');
-
-    debugPrint('File Path: ${file.path}');
-
-    debugPrint('File Size: ${file.size}');
-
-    debugPrint('================================');
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Audio is ready to be processed.')),
-    );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Saved to ${recording.audioPath}')),
+      );
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _isSaving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to save audio: $e')),
+      );
+    }
   }
 
   // ============================================================
@@ -455,7 +471,7 @@ class _UploadScreenState extends State<UploadScreen> {
                       height: 38,
 
                       child: ElevatedButton(
-                        onPressed: _canCreateSummary ? _createSummary : null,
+                        onPressed: _canCreateSummary && !_isSaving ? _createSummary : null,
 
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF6195F2),
@@ -471,14 +487,22 @@ class _UploadScreenState extends State<UploadScreen> {
                           ),
                         ),
 
-                        child: const Text(
-                          'Create Summary',
-
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                        child: _isSaving
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text(
+                                'Create Summary',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                       ),
                     ),
                   ],

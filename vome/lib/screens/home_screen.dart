@@ -1,73 +1,25 @@
 import 'package:flutter/material.dart';
 
+import '../models/recording.dart';
+
 class HomeScreen extends StatelessWidget {
-  // ============================================================
-  // USER DATA
-  // ============================================================
-
   final String username;
-
-  // จำนวน recordings ในสัปดาห์นี้
   final int recordingsThisWeek;
-
-  // เวลารวมที่บันทึกในสัปดาห์นี้
   final Duration totalRecordingTime;
-
-  // Summary ล่าสุด
-  final List<SummaryItem> recentSummaries;
-
-  // ปุ่ม New Recording
+  final List<Recording> recentRecordings;
   final VoidCallback? onNewRecording;
-
-  // เมื่อกด Summary
-  final void Function(SummaryItem summary)? onSummaryTap;
-
-  // Bottom Navigation
+  final void Function(Recording recording)? onSummaryTap;
   final int currentIndex;
   final void Function(int index)? onNavigationTap;
 
   const HomeScreen({
     super.key,
-
     required this.username,
-
-    this.recordingsThisWeek = 3,
-
-    this.totalRecordingTime = const Duration(
-      hours: 3,
-      minutes: 27,
-    ),
-
-    this.recentSummaries = const [
-      SummaryItem(
-        title: 'Weekly Eng Sync',
-        type: 'Meeting',
-        status: 'Pending',
-        mood: 'Positive',
-        date: '4 Aug 2026',
-        duration: '48 min',
-      ),
-      SummaryItem(
-        title: 'ML Lecture — Transformers',
-        type: 'Lecture',
-        status: 'No Action',
-        mood: 'Neutral',
-        date: '3 Aug 2026',
-        duration: '1h 12min',
-      ),
-      SummaryItem(
-        title: 'Product Strategy Call',
-        type: 'Meeting',
-        status: 'Completed',
-        mood: 'Positive',
-        date: '1 Aug 2026',
-        duration: '35 min',
-      ),
-    ],
-
+    this.recordingsThisWeek = 0,
+    this.totalRecordingTime = Duration.zero,
+    this.recentRecordings = const [],
     this.onNewRecording,
     this.onSummaryTap,
-
     this.currentIndex = 0,
     this.onNavigationTap,
   });
@@ -95,6 +47,7 @@ class HomeScreen extends StatelessWidget {
 
                     _Header(
                       username: username,
+                      summaryCount: recentRecordings.length,
                     ),
 
                     // ==========================================
@@ -223,26 +176,16 @@ class HomeScreen extends StatelessWidget {
                               // RECENT SUMMARIES
                               // ==================================
 
-                              ...recentSummaries
+                              ...recentRecordings
                                   .take(3)
                                   .map(
-                                    (summary) {
+                                    (recording) {
                                       return Padding(
-                                        padding:
-                                            const EdgeInsets
-                                                .only(
-                                          bottom: 10,
-                                        ),
-
-                                        child:
-                                            _SummaryCard(
-                                          summary: summary,
-
+                                        padding: const EdgeInsets.only(bottom: 10),
+                                        child: _SummaryCard(
+                                          recording: recording,
                                           onTap: () {
-                                            onSummaryTap
-                                                ?.call(
-                                              summary,
-                                            );
+                                            onSummaryTap?.call(recording);
                                           },
                                         ),
                                       );
@@ -295,9 +238,11 @@ class HomeScreen extends StatelessWidget {
 
 class _Header extends StatelessWidget {
   final String username;
+  final int summaryCount;
 
   const _Header({
     required this.username,
+    this.summaryCount = 0,
   });
 
   @override
@@ -375,7 +320,9 @@ class _Header extends StatelessWidget {
 
           // Saved summaries
           Text(
-            'You have 4 saved summaries',
+            summaryCount == 1
+                ? 'You have 1 saved summary'
+                : 'You have $summaryCount saved summaries',
             style: TextStyle(
               color: Colors.white.withOpacity(0.85),
               fontSize: 12,
@@ -579,11 +526,11 @@ class _StatCard extends StatelessWidget {
 // ================================================================
 
 class _SummaryCard extends StatelessWidget {
-  final SummaryItem summary;
+  final Recording recording;
   final VoidCallback? onTap;
 
   const _SummaryCard({
-    required this.summary,
+    required this.recording,
     this.onTap,
   });
 
@@ -641,7 +588,7 @@ class _SummaryCard extends StatelessWidget {
 
                   Expanded(
                     child: Text(
-                      summary.title,
+                      recording.title,
                       maxLines: 1,
                       overflow:
                           TextOverflow.ellipsis,
@@ -658,7 +605,7 @@ class _SummaryCard extends StatelessWidget {
                   const SizedBox(width: 5),
 
                   _MoodBadge(
-                    mood: summary.mood,
+                    mood: recording.mood,
                   ),
                 ],
               ),
@@ -672,13 +619,13 @@ class _SummaryCard extends StatelessWidget {
               Row(
                 children: [
                   _TypeBadge(
-                    text: summary.type,
+                    text: recording.eventType,
                   ),
 
                   const SizedBox(width: 7),
 
                   _StatusBadge(
-                    text: summary.status,
+                    text: recording.status,
                   ),
                 ],
               ),
@@ -690,7 +637,7 @@ class _SummaryCard extends StatelessWidget {
               // ================================================
 
               Text(
-                '${summary.date} · ${summary.duration}',
+                '${recording.formattedDate} · ${recording.formattedDuration}',
                 style: const TextStyle(
                   fontSize: 10,
                   color: Color(0xFF919AAA),
@@ -994,27 +941,4 @@ class _BottomNavigation extends StatelessWidget {
       ),
     );
   }
-}
-
-
-// ================================================================
-// DATA MODEL
-// ================================================================
-
-class SummaryItem {
-  final String title;
-  final String type;
-  final String status;
-  final String mood;
-  final String date;
-  final String duration;
-
-  const SummaryItem({
-    required this.title,
-    required this.type,
-    required this.status,
-    required this.mood,
-    required this.date,
-    required this.duration,
-  });
 }

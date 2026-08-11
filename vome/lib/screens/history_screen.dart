@@ -1,23 +1,16 @@
 import 'package:flutter/material.dart';
 
+import '../models/recording.dart';
+import '../services/recording_repository.dart';
+
 class HistoryScreen extends StatefulWidget {
-  /// กด Home จาก Bottom Navigation
   final VoidCallback? onHomeTap;
-
-  /// กด History จาก Bottom Navigation
   final VoidCallback? onHistoryTap;
-
-  /// กด Upload จาก Bottom Navigation
   final VoidCallback? onUploadTap;
-
-  /// กด Profile จาก Bottom Navigation
   final VoidCallback? onProfileTap;
-
-  /// กดรายการ Recording เพื่อไปหน้า Detail
-  final void Function(RecordingItem recording)? onRecordingTap;
-
-  /// Bottom Navigation index ปัจจุบัน
+  final void Function(Recording recording)? onRecordingTap;
   final int currentIndex;
+  final Key? refreshKey;
 
   const HistoryScreen({
     super.key,
@@ -27,6 +20,7 @@ class HistoryScreen extends StatefulWidget {
     this.onProfileTap,
     this.onRecordingTap,
     this.currentIndex = 1,
+    this.refreshKey,
   });
 
   @override
@@ -34,15 +28,7 @@ class HistoryScreen extends StatefulWidget {
 }
 
 class _HistoryScreenState extends State<HistoryScreen> {
-  // ============================================================
-  // SEARCH
-  // ============================================================
-
   final TextEditingController _searchController = TextEditingController();
-
-  // ============================================================
-  // FILTER
-  // ============================================================
 
   String _selectedFilter = 'All';
 
@@ -55,84 +41,67 @@ class _HistoryScreenState extends State<HistoryScreen> {
     'Personal Note',
   ];
 
-  // ============================================================
-  // LOCAL RECORDINGS
-  // ============================================================
-  //
-  // ตอนนี้ใช้ข้อมูลตัวอย่างก่อน
-  //
-  // ภายหลังสามารถเปลี่ยนตรงนี้เป็นข้อมูลจาก
-  // SQLite / Hive / Isar / SharedPreferences ได้
-  //
-  // ============================================================
+  List<Recording> _recordings = [];
+  bool _isLoading = true;
 
-  final List<RecordingItem> _recordings = [
-    RecordingItem(
-      id: '1',
-      title: 'Weekly Eng Sync',
-      type: 'Meeting',
-      category: 'Software Engineering',
-      mood: 'Positive',
-      status: 'Pending',
-      date: '4 Aug 2026',
-      duration: '48 min',
-    ),
+  @override
+  void initState() {
+    super.initState();
+    _loadRecordings();
+  }
 
-    RecordingItem(
-      id: '2',
-      title: 'ML Lecture — Transformers',
-      type: 'Lecture',
-      category: 'Machine Learning',
-      mood: 'Neutral',
-      status: 'No Action',
-      date: '3 Aug 2026',
-      duration: '1h 12min',
-    ),
+  @override
+  void didUpdateWidget(HistoryScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshKey != widget.refreshKey) {
+      _loadRecordings();
+    }
+  }
 
-    RecordingItem(
-      id: '3',
-      title: 'Product Strategy Call',
-      type: 'Meeting',
-      category: 'Product',
-      mood: 'Positive',
-      status: 'Completed',
-      date: '1 Aug 2026',
-      duration: '35 min',
-    ),
+  Future<void> _loadRecordings() async {
+    setState(() => _isLoading = true);
+    final recordings = await RecordingRepository.instance.getAllRecordings();
+    if (mounted) {
+      setState(() {
+        _recordings = recordings;
+        _isLoading = false;
+      });
+    }
+  }
 
-    RecordingItem(
-      id: '4',
-      title: 'Candidate Interview — UX',
-      type: 'Interview',
-      category: 'HR',
-      mood: 'Positive',
-      status: 'Pending',
-      date: '30 Jul 2026',
-      duration: '52 min',
-    ),
+  Future<void> _deleteRecording(Recording recording) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Recording'),
+        content: Text('Delete "${recording.title}" and its audio file?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: const Color(0xFFE05A67)),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
 
-    RecordingItem(
-      id: '5',
-      title: 'App Feature Brainstorm',
-      type: 'Brainstorm',
-      category: 'Product',
-      mood: 'Positive',
-      status: 'Completed',
-      date: '29 Jul 2026',
-      duration: '42 min',
-    ),
+    if (confirmed != true || !mounted) {
+      return;
+    }
 
-    RecordingItem(
-      id: '6',
-      title: 'Personal Thoughts',
-      type: 'Personal Note',
-      category: 'Personal',
-      mood: 'Neutral',
-      status: 'No Action',
-      date: '28 Jul 2026',
-      duration: '18 min',
-    ),
-  ];
+    await RecordingRepository.instance.deleteRecording(recording.id);
+    await _loadRecordings();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Recording deleted')),
+      );
+    }
+  }
 
   // ============================================================
   // DISPOSE
@@ -148,17 +117,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
   // FILTER RECORDINGS
   // ============================================================
 
-  List<RecordingItem> get _filteredRecordings {
+  List<Recording> get _filteredRecordings {
     final searchText = _searchController.text.trim().toLowerCase();
 
     return _recordings.where((recording) {
-      // Filter ประเภท
       final matchesType =
-          _selectedFilter == 'All' || recording.type == _selectedFilter;
+          _selectedFilter == 'All' || recording.eventType == _selectedFilter;
 
-      // Search
-      final matchesSearch =
-          searchText.isEmpty ||
+      final matchesSearch = searchText.isEmpty ||
           recording.title.toLowerCase().contains(searchText) ||
           recording.category.toLowerCase().contains(searchText);
 
@@ -264,28 +230,31 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   // RECORDING LIST
                   // ==========================================
                   Expanded(
-                    child: recordings.isEmpty
-                        ? const _EmptyHistory()
-                        : ListView.separated(
-                            padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+                    child: _isLoading
+                        ? const Center(
+                            child: CircularProgressIndicator(
+                              color: Color(0xFF6195F2),
+                            ),
+                          )
+                        : recordings.isEmpty
+                            ? const _EmptyHistory()
+                            : ListView.separated(
+                                padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+                                itemCount: recordings.length,
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(height: 10),
+                                itemBuilder: (context, index) {
+                                  final recording = recordings[index];
 
-                            itemCount: recordings.length,
-
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(height: 10),
-
-                            itemBuilder: (context, index) {
-                              final recording = recordings[index];
-
-                              return _HistoryCard(
-                                recording: recording,
-
-                                onTap: () {
-                                  widget.onRecordingTap?.call(recording);
+                                  return _HistoryCard(
+                                    recording: recording,
+                                    onTap: () {
+                                      widget.onRecordingTap?.call(recording);
+                                    },
+                                    onDelete: () => _deleteRecording(recording),
+                                  );
                                 },
-                              );
-                            },
-                          ),
+                              ),
                   ),
                 ],
               ),
@@ -422,10 +391,15 @@ class _FilterChip extends StatelessWidget {
 // ================================================================
 
 class _HistoryCard extends StatelessWidget {
-  final RecordingItem recording;
+  final Recording recording;
   final VoidCallback? onTap;
+  final VoidCallback? onDelete;
 
-  const _HistoryCard({required this.recording, this.onTap});
+  const _HistoryCard({
+    required this.recording,
+    this.onTap,
+    this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -504,17 +478,18 @@ class _HistoryCard extends StatelessWidget {
                       children: [
                         _SmallBadge(
                           icon: Icons.subdirectory_arrow_right_rounded,
-                          text: recording.type,
+                          text: recording.eventType,
                           color: const Color(0xFF4C7FF0),
                           background: const Color(0xFFEAF2FF),
                         ),
 
-                        _SmallBadge(
-                          icon: Icons.folder_open_rounded,
-                          text: recording.category,
-                          color: const Color(0xFF475467),
-                          background: const Color(0xFFF1F3F5),
-                        ),
+                        if (recording.category.isNotEmpty)
+                          _SmallBadge(
+                            icon: Icons.folder_open_rounded,
+                            text: recording.category,
+                            color: const Color(0xFF475467),
+                            background: const Color(0xFFF1F3F5),
+                          ),
                       ],
                     ),
 
@@ -536,7 +511,7 @@ class _HistoryCard extends StatelessWidget {
 
                     // Date
                     Text(
-                      '${recording.date} · ${recording.duration}',
+                      '${recording.formattedDate} · ${recording.formattedDuration}',
 
                       style: const TextStyle(
                         fontSize: 10,
@@ -546,6 +521,16 @@ class _HistoryCard extends StatelessWidget {
                   ],
                 ),
               ),
+
+              if (onDelete != null)
+                IconButton(
+                  onPressed: onDelete,
+                  icon: const Icon(
+                    Icons.delete_outline_rounded,
+                    size: 18,
+                    color: Color(0xFFE05A67),
+                  ),
+                ),
             ],
           ),
         ),
@@ -830,30 +815,4 @@ class _BottomNavigation extends StatelessWidget {
       ),
     );
   }
-}
-
-// ================================================================
-// RECORDING DATA MODEL
-// ================================================================
-
-class RecordingItem {
-  final String id;
-  final String title;
-  final String type;
-  final String category;
-  final String mood;
-  final String status;
-  final String date;
-  final String duration;
-
-  const RecordingItem({
-    required this.id,
-    required this.title,
-    required this.type,
-    required this.category,
-    required this.mood,
-    required this.status,
-    required this.date,
-    required this.duration,
-  });
 }
