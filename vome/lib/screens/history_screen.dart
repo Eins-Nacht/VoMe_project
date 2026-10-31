@@ -204,7 +204,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
                       itemCount: _filters.length,
 
-                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      separatorBuilder: (_, _) => const SizedBox(width: 8),
 
                       itemBuilder: (context, index) {
                         final filter = _filters[index];
@@ -241,7 +241,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                             : ListView.separated(
                                 padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
                                 itemCount: recordings.length,
-                                separatorBuilder: (_, __) =>
+                                separatorBuilder: (_, _) =>
                                     const SizedBox(height: 10),
                                 itemBuilder: (context, index) {
                                   final recording = recordings[index];

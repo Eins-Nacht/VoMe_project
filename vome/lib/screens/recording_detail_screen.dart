@@ -1,9 +1,13 @@
+import 'dart:convert';
+
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 
 import '../models/recording.dart';
 import '../services/audio_storage_service.dart';
 import '../services/recording_repository.dart';
+import '../services/processing_service.dart';
+import 'summary_preview.dart';
 
 class RecordingDetailScreen extends StatefulWidget {
   final Recording recording;
@@ -20,9 +24,9 @@ class RecordingDetailScreen extends StatefulWidget {
   @override
   State<RecordingDetailScreen> createState() => _RecordingDetailScreenState();
 }
-
 class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
   final AudioPlayer _player = AudioPlayer();
+  late Recording _recording;
 
   bool _isPlaying = false;
   bool _isDeleting = false;
@@ -32,7 +36,8 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _totalDuration = Duration(milliseconds: widget.recording.durationMs);
+    _recording = widget.recording;
+    _totalDuration = Duration(milliseconds: _recording.durationMs);
 
     _player.onPlayerStateChanged.listen((state) {
       if (!mounted) {
@@ -85,7 +90,7 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
     }
 
     final absolutePath = AudioStorageService.instance.absolutePath(
-      widget.recording.audioPath,
+      _recording.audioPath,
     );
 
     await _player.play(DeviceFileSource(absolutePath));
@@ -121,7 +126,7 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
 
     try {
       await _player.stop();
-      await RecordingRepository.instance.deleteRecording(widget.recording.id);
+      await RecordingRepository.instance.deleteRecording(_recording.id);
 
       if (!mounted) {
         return;
@@ -151,9 +156,44 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
     return '$minutes:$seconds';
   }
 
+  Future<void> _editSummary() async {
+    final source = _recording.summaryJson;
+    if (source == null) return;
+    final summary = Map<String, dynamic>.from(jsonDecode(source) as Map);
+    final controller = TextEditingController(text: summary['overview'] as String? ?? '');
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit summary overview'),
+        content: TextField(controller: controller, minLines: 4, maxLines: 8),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Save')),
+        ],
+      ),
+    );
+    if (saved != true) return;
+    summary['overview'] = controller.text.trim();
+    await RecordingRepository.instance.updateSummary(_recording.id, jsonEncode(summary));
+    final updated = await RecordingRepository.instance.getRecordingById(_recording.id);
+    if (updated != null && mounted) setState(() => _recording = updated);
+  }
+
+  Future<void> _deleteSummary() async {
+    await RecordingRepository.instance.updateSummary(_recording.id, null);
+    final updated = await RecordingRepository.instance.getRecordingById(_recording.id);
+    if (updated != null && mounted) setState(() => _recording = updated);
+  }
+
+  Future<void> _retryProcessing() async {
+    await ProcessingService.instance.retry(_recording);
+    final updated = await RecordingRepository.instance.getRecordingById(_recording.id);
+    if (updated != null && mounted) setState(() => _recording = updated);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final recording = widget.recording;
+    final recording = _recording;
     final progress = _totalDuration.inMilliseconds > 0
         ? _position.inMilliseconds / _totalDuration.inMilliseconds
         : 0.0;
@@ -201,7 +241,13 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
                       height: 20,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  else
+                  else ...[
+                    if (recording.status == 'Failed' && recording.audioRetained)
+                      IconButton(
+                        onPressed: _retryProcessing,
+                        icon: const Icon(Icons.refresh_rounded),
+                        tooltip: 'Retry processing',
+                      ),
                     IconButton(
                       onPressed: _confirmDelete,
                       icon: const Icon(
@@ -209,6 +255,7 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
                         color: Color(0xFFE05A67),
                       ),
                     ),
+                  ],
                 ],
               ),
             ),
@@ -242,10 +289,34 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
                         color: Color(0xFF98A2B3),
                       ),
                     ),
+                    if (recording.summaryJson != null)
+                      SummaryPreview(
+                        summaryJson: recording.summaryJson!,
+                        onEdit: _editSummary,
+                        onDelete: _deleteSummary,
+                      )
+                    else if (recording.transcript != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Text(
+                          recording.transcript!,
+                          maxLines: 4,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 12, color: Color(0xFF526071)),
+                        ),
+                      )
+                    else if (recording.processingError != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Text(
+                          recording.processingError!,
+                          style: const TextStyle(fontSize: 12, color: Color(0xFFE05A67)),
+                        ),
+                      ),
                     const Spacer(),
                     Center(
                       child: GestureDetector(
-                        onTap: _isDeleting ? null : _togglePlayback,
+                        onTap: _isDeleting || !recording.audioRetained ? null : _togglePlayback,
                         child: Container(
                           width: 76,
                           height: 76,

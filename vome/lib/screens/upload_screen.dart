@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../models/recording.dart';
 import '../services/recording_repository.dart';
+import '../services/processing_service.dart';
 
 class UploadScreen extends StatefulWidget {
   final VoidCallback? onHomeTap;
@@ -58,6 +59,7 @@ class _UploadScreenState extends State<UploadScreen> {
 
   bool _isPickingFile = false;
   bool _isSaving = false;
+  bool _keepAudio = true;
 
   // ============================================================
   // DISPOSE
@@ -233,7 +235,9 @@ class _UploadScreenState extends State<UploadScreen> {
         title: title,
         eventType: eventType,
         duration: Duration.zero,
+        audioRetained: _keepAudio,
       );
+      await ProcessingService.instance.enqueue(recording);
 
       if (!mounted) {
         return;
@@ -465,6 +469,17 @@ class _UploadScreenState extends State<UploadScreen> {
                     // ==========================================
                     // CREATE SUMMARY BUTTON
                     // ==========================================
+                    SwitchListTile.adaptive(
+                      contentPadding: EdgeInsets.zero,
+                      value: _keepAudio,
+                      onChanged: _isSaving
+                          ? null
+                          : (value) => setState(() => _keepAudio = value),
+                      title: const Text('Keep audio after processing'),
+                      subtitle: const Text(
+                        'Turn this off to retain only the transcript and summary.',
+                      ),
+                    ),
                     SizedBox(
                       width: double.infinity,
 

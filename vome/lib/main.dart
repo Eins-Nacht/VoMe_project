@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'models/recording.dart';
 import 'screens/history_screen.dart';
@@ -10,11 +13,17 @@ import 'screens/upload_screen.dart';
 import 'services/audio_storage_service.dart';
 import 'services/database_service.dart';
 import 'services/recording_repository.dart';
+import 'services/processing_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  }
   await DatabaseService.instance.init();
   await AudioStorageService.instance.init();
+  await ProcessingService.instance.resumePendingJobs();
   runApp(const AudiaryApp());
 }
 

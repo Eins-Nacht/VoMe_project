@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../models/recording.dart';
 import '../services/microphone_service.dart';
 import '../services/recording_repository.dart';
+import '../services/processing_service.dart';
 
 class RecordingScreen extends StatefulWidget {
   final VoidCallback? onBack;
@@ -28,6 +29,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
   bool _isRecording = false;
   bool _isPaused = false;
   bool _isSaving = false;
+  bool _keepAudio = true;
   String _selectedEventType = 'Meeting';
 
   final List<String> _eventTypes = [
@@ -117,7 +119,9 @@ class _RecordingScreenState extends State<RecordingScreen> {
         title: _titleController.text.trim(),
         eventType: _selectedEventType,
         duration: _recordingDuration,
+        audioRetained: _keepAudio,
       );
+      await ProcessingService.instance.enqueue(recording);
 
       if (!mounted) {
         return;
@@ -294,6 +298,17 @@ class _RecordingScreenState extends State<RecordingScreen> {
                           },
                         );
                       }).toList(),
+                    ),
+                    SwitchListTile.adaptive(
+                      contentPadding: EdgeInsets.zero,
+                      value: _keepAudio,
+                      onChanged: _isRecording || _isSaving
+                          ? null
+                          : (value) => setState(() => _keepAudio = value),
+                      title: const Text('Keep audio after processing'),
+                      subtitle: const Text(
+                        'Turn this off to retain only the transcript and summary.',
+                      ),
                     ),
                     const SizedBox(height: 38),
                     Center(

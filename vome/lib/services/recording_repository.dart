@@ -17,6 +17,7 @@ class RecordingRepository {
     required String title,
     required String eventType,
     required Duration duration,
+    bool audioRetained = true,
   }) async {
     final prefix = _eventTypePrefix(eventType);
     final sequence = await DatabaseService.instance.countRecordingsWithPrefix(prefix) + 1;
@@ -39,6 +40,7 @@ class RecordingRepository {
       fileSize: fileSize,
       mimeType: AudioStorageService.mimeTypeForExtension('m4a'),
       source: 'recorded',
+      audioRetained: audioRetained,
     );
 
     await DatabaseService.instance.insertRecording(recording);
@@ -51,6 +53,7 @@ class RecordingRepository {
     required String title,
     required String eventType,
     required Duration duration,
+    bool audioRetained = true,
   }) async {
     final prefix = _eventTypePrefix(eventType);
     final sequence = await DatabaseService.instance.countRecordingsWithPrefix(prefix) + 1;
@@ -75,6 +78,7 @@ class RecordingRepository {
       fileSize: fileSize,
       mimeType: AudioStorageService.mimeTypeForExtension(extension),
       source: 'uploaded',
+      audioRetained: audioRetained,
     );
 
     await DatabaseService.instance.insertRecording(recording);
@@ -99,8 +103,42 @@ class RecordingRepository {
       return;
     }
 
-    await AudioStorageService.instance.deleteAudioFile(recording.audioPath);
+    if (recording.audioRetained) {
+      await AudioStorageService.instance.deleteAudioFile(recording.audioPath);
+    }
     await DatabaseService.instance.deleteRecording(id);
+  }
+
+  Future<void> updateProcessing(
+    String id, {
+    required String status,
+    String? jobId,
+    String? transcript,
+    String? summaryJson,
+    String? error,
+  }) {
+    return DatabaseService.instance.updateRecording(id, {
+      'status': status,
+      if (jobId != null) 'processing_job_id': jobId,
+      if (transcript != null) 'transcript': transcript,
+      if (summaryJson != null) 'summary_json': summaryJson,
+      'processing_error': error,
+    });
+  }
+
+  Future<void> removeLocalAudio(Recording recording) async {
+    await AudioStorageService.instance.deleteAudioFile(recording.audioPath);
+    await DatabaseService.instance.updateRecording(recording.id, {
+      'audio_retained': 0,
+      'file_size': null,
+    });
+  }
+
+  Future<void> updateSummary(String id, String? summaryJson) {
+    return DatabaseService.instance.updateRecording(id, {
+      'summary_json': summaryJson,
+      'status': summaryJson == null ? 'Pending' : 'Completed',
+    });
   }
 
   Future<int> countRecordingsThisWeek() {
