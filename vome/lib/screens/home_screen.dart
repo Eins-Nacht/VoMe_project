@@ -291,7 +291,7 @@ class _Header extends StatelessWidget {
                 height: 32,
 
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.16),
+                  color: Colors.white.withValues(alpha: 0.16),
                   shape: BoxShape.circle,
                 ),
 
@@ -324,7 +324,7 @@ class _Header extends StatelessWidget {
                 ? 'You have 1 saved summary'
                 : 'You have $summaryCount saved summaries',
             style: TextStyle(
-              color: Colors.white.withOpacity(0.85),
+              color: Colors.white.withValues(alpha: 0.85),
               fontSize: 12,
             ),
           ),
@@ -368,7 +368,7 @@ class _NewRecordingCard extends StatelessWidget {
 
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.06),
+                color: Colors.black.withValues(alpha: 0.06),
                 blurRadius: 14,
                 offset: const Offset(0, 5),
               ),
@@ -390,7 +390,7 @@ class _NewRecordingCard extends StatelessWidget {
                   boxShadow: [
                     BoxShadow(
                       color: const Color(0xFF6195F2)
-                          .withOpacity(0.25),
+                          .withValues(alpha: 0.25),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),

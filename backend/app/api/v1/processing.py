@@ -10,6 +10,8 @@ from app.models import AudioRecord, Event, ProcessingJob, ProcessingStatus, User
 from app.models.transcript import Transcript
 from app.schemas.processing import ProcessingJobResponse, ProcessingResultResponse
 from app.services.processing_service import ProcessingService
+from app.core.config import get_settings
+from app.services.processing_providers import get_configured_providers
 
 router = APIRouter(prefix="/processing", tags=["processing"])
 
@@ -30,7 +32,16 @@ def _owned_job(db: Session, user: User, job_id: int) -> ProcessingJob:
 
 
 def _run_job(job_id: int, session_factory, storage_service) -> None:
-    ProcessingService(session_factory, storage_service=storage_service).run(job_id)
+    settings = get_settings()
+    service = ProcessingService(session_factory, storage_service=storage_service)
+    try:
+        stt_provider, llm_provider = get_configured_providers(settings)
+    except RuntimeError as exc:
+        service.mark_failed(job_id, str(exc))
+        return
+    service.stt_provider = stt_provider
+    service.llm_provider = llm_provider
+    service.run(job_id)
 
 
 @router.post(

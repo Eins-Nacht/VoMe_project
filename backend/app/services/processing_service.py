@@ -66,3 +66,11 @@ class ProcessingService:
                     failed_job.status = ProcessingStatus.FAILED
                     failed_job.error_message = str(exc)[:2000]
                     db.commit()
+
+    def mark_failed(self, job_id: int, error_message: str) -> None:
+        with self.session_factory() as db:
+            job = db.get(ProcessingJob, job_id)
+            if job is not None:
+                job.status = ProcessingStatus.FAILED
+                job.error_message = error_message[:2000]
+                db.commit()

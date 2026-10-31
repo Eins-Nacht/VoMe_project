@@ -11,6 +11,11 @@ class Recording {
   final int? fileSize;
   final String? mimeType;
   final String source;
+  final String? processingJobId;
+  final String? transcript;
+  final String? summaryJson;
+  final String? processingError;
+  final bool audioRetained;
 
   const Recording({
     required this.id,
@@ -25,6 +30,11 @@ class Recording {
     this.fileSize,
     this.mimeType,
     required this.source,
+    this.processingJobId,
+    this.transcript,
+    this.summaryJson,
+    this.processingError,
+    this.audioRetained = true,
   });
 
   Map<String, Object?> toMap() {
@@ -41,6 +51,11 @@ class Recording {
       'file_size': fileSize,
       'mime_type': mimeType,
       'source': source,
+      'processing_job_id': processingJobId,
+      'transcript': transcript,
+      'summary_json': summaryJson,
+      'processing_error': processingError,
+      'audio_retained': audioRetained ? 1 : 0,
     };
   }
 
@@ -58,6 +73,11 @@ class Recording {
       fileSize: map['file_size'] as int?,
       mimeType: map['mime_type'] as String?,
       source: map['source'] as String,
+      processingJobId: map['processing_job_id'] as String?,
+      transcript: map['transcript'] as String?,
+      summaryJson: map['summary_json'] as String?,
+      processingError: map['processing_error'] as String?,
+      audioRetained: (map['audio_retained'] as int? ?? 1) == 1,
     );
   }
 
@@ -87,6 +107,6 @@ class Recording {
     if (hours > 0) {
       return '${hours}h ${minutes}min';
     }
-    return '${minutes} min';
+    return '$minutes min';
   }
 }

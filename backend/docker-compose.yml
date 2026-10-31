@@ -1,0 +1,13 @@
+services:
+  api:
+    build: .
+    env_file: .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - processing-data:/data
+      - whisper-models:/models
+
+volumes:
+  processing-data:
+  whisper-models:

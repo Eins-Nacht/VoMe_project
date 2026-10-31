@@ -20,7 +20,7 @@ class DatabaseService {
 
     _db = await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE recordings (
@@ -36,8 +36,22 @@ class DatabaseService {
             file_size     INTEGER,
             mime_type     TEXT,
             source        TEXT NOT NULL
+            ,processing_job_id TEXT
+            ,transcript TEXT
+            ,summary_json TEXT
+            ,processing_error TEXT
+            ,audio_retained INTEGER NOT NULL DEFAULT 1
           )
         ''');
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute('ALTER TABLE recordings ADD COLUMN processing_job_id TEXT');
+          await db.execute('ALTER TABLE recordings ADD COLUMN transcript TEXT');
+          await db.execute('ALTER TABLE recordings ADD COLUMN summary_json TEXT');
+          await db.execute('ALTER TABLE recordings ADD COLUMN processing_error TEXT');
+          await db.execute('ALTER TABLE recordings ADD COLUMN audio_retained INTEGER NOT NULL DEFAULT 1');
+        }
       },
     );
   }
@@ -118,5 +132,9 @@ class DatabaseService {
       where: 'id = ?',
       whereArgs: [id],
     );
+  }
+
+  Future<void> updateRecording(String id, Map<String, Object?> values) async {
+    await _database.update('recordings', values, where: 'id = ?', whereArgs: [id]);
   }
 }
