@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../models/recording.dart';
 import '../services/recording_repository.dart';
+import '../services/backend_recording_service.dart';
 
 class UploadScreen extends StatefulWidget {
   final VoidCallback? onHomeTap;
@@ -219,7 +220,9 @@ class _UploadScreenState extends State<UploadScreen> {
 
     if (file.path == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Unable to access the selected file path.')),
+        const SnackBar(
+          content: Text('Unable to access the selected file path.'),
+        ),
       );
       return;
     }
@@ -233,6 +236,11 @@ class _UploadScreenState extends State<UploadScreen> {
         title: title,
         eventType: eventType,
         duration: Duration.zero,
+      );
+      await BackendRecordingService.instance.uploadAndProcess(
+        title: title,
+        category: eventType,
+        filePath: file.path!,
       );
 
       if (!mounted) {
@@ -256,9 +264,9 @@ class _UploadScreenState extends State<UploadScreen> {
         return;
       }
       setState(() => _isSaving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to save audio: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to save audio: $e')));
     }
   }
 
@@ -471,7 +479,9 @@ class _UploadScreenState extends State<UploadScreen> {
                       height: 38,
 
                       child: ElevatedButton(
-                        onPressed: _canCreateSummary && !_isSaving ? _createSummary : null,
+                        onPressed: _canCreateSummary && !_isSaving
+                            ? _createSummary
+                            : null,
 
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF6195F2),

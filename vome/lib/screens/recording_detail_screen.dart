@@ -1,18 +1,19 @@
+import 'dart:typed_data';
+
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 
-import '../models/recording.dart';
-import '../services/audio_storage_service.dart';
-import '../services/recording_repository.dart';
+import '../services/audio_api_service.dart';
+import '../services/remote_summary_service.dart';
 
 class RecordingDetailScreen extends StatefulWidget {
-  final Recording recording;
+  final RemoteSummary summary;
   final VoidCallback? onDeleted;
   final VoidCallback? onBack;
 
   const RecordingDetailScreen({
     super.key,
-    required this.recording,
+    required this.summary,
     this.onDeleted,
     this.onBack,
   });
@@ -23,52 +24,18 @@ class RecordingDetailScreen extends StatefulWidget {
 
 class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
   final AudioPlayer _player = AudioPlayer();
-
-  bool _isPlaying = false;
-  bool _isDeleting = false;
-  Duration _position = Duration.zero;
-  Duration _totalDuration = Duration.zero;
+  late RemoteSummary _summary;
+  bool _playing = false;
+  bool _saving = false;
+  bool _deleting = false;
+  Uint8List? _audioBytes;
 
   @override
   void initState() {
     super.initState();
-    _totalDuration = Duration(milliseconds: widget.recording.durationMs);
-
+    _summary = widget.summary;
     _player.onPlayerStateChanged.listen((state) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _isPlaying = state == PlayerState.playing;
-      });
-    });
-
-    _player.onDurationChanged.listen((duration) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _totalDuration = duration;
-      });
-    });
-
-    _player.onPositionChanged.listen((position) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _position = position;
-      });
-    });
-
-    _player.onPlayerComplete.listen((_) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _isPlaying = false;
-        _position = Duration.zero;
-      });
+      if (mounted) setState(() => _playing = state == PlayerState.playing);
     });
   }
 
@@ -78,284 +45,161 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
     super.dispose();
   }
 
-  Future<void> _togglePlayback() async {
-    if (_isPlaying) {
-      await _player.pause();
-      return;
+  Future<void> _play() async {
+    try {
+      if (_playing) {
+        await _player.pause();
+        return;
+      }
+      _audioBytes ??= await RemoteSummaryService.instance.api!.download(
+        _summary.audioRecordId,
+      );
+      await _player.play(BytesSource(_audioBytes!));
+    } catch (error) {
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$error')));
     }
-
-    final absolutePath = AudioStorageService.instance.absolutePath(
-      widget.recording.audioPath,
-    );
-
-    await _player.play(DeviceFileSource(absolutePath));
   }
 
-  Future<void> _confirmDelete() async {
+  Future<void> _edit() async {
+    final controller = TextEditingController(text: _summary.summary);
+    final value = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit summary'),
+        content: TextField(controller: controller, maxLines: 5),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (value == null || value.isEmpty) return;
+    setState(() => _saving = true);
+    try {
+      _summary = await RemoteSummaryService.instance.api!.updateSummary(
+        _summary.id,
+        summary: value,
+      );
+      if (mounted) setState(() => _saving = false);
+    } catch (error) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$error')));
+      }
+    }
+  }
+
+  Future<void> _delete() async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Recording'),
-        content: const Text(
-          'This will permanently delete the audio file and its record. This action cannot be undone.',
-        ),
+        title: const Text('Delete summary?'),
+        content: const Text('This cannot be undone.'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.pop(context, false),
             child: const Text('Cancel'),
           ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: const Color(0xFFE05A67)),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
             child: const Text('Delete'),
           ),
         ],
       ),
     );
-
-    if (confirmed != true || !mounted) {
-      return;
-    }
-
-    setState(() => _isDeleting = true);
-
+    if (confirmed != true) return;
+    setState(() => _deleting = true);
     try {
-      await _player.stop();
-      await RecordingRepository.instance.deleteRecording(widget.recording.id);
-
-      if (!mounted) {
-        return;
-      }
-
+      await RemoteSummaryService.instance.api!.deleteSummary(_summary.id);
       widget.onDeleted?.call();
-
-      if (widget.onBack != null) {
-        widget.onBack!();
-      } else {
-        Navigator.of(context).pop(true);
+      widget.onBack?.call();
+    } catch (error) {
+      if (mounted) {
+        setState(() => _deleting = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$error')));
       }
-    } catch (e) {
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to delete recording: $e')),
-      );
-      setState(() => _isDeleting = false);
     }
-  }
-
-  String _formatDuration(Duration duration) {
-    final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return '$minutes:$seconds';
   }
 
   @override
-  Widget build(BuildContext context) {
-    final recording = widget.recording;
-    final progress = _totalDuration.inMilliseconds > 0
-        ? _position.inMilliseconds / _totalDuration.inMilliseconds
-        : 0.0;
-
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Column(
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(
+      title: const Text('Summary Detail'),
+      leading: BackButton(onPressed: widget.onBack),
+      actions: [
+        IconButton(
+          onPressed: _saving ? null : _edit,
+          icon: const Icon(Icons.edit),
+        ),
+        IconButton(
+          onPressed: _deleting ? null : _delete,
+          icon: const Icon(Icons.delete_outline),
+        ),
+      ],
+    ),
+    body: ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        Text(
+          _summary.eventTitle,
+          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          _summary.audioFilename,
+          style: const TextStyle(color: Colors.grey),
+        ),
+        const SizedBox(height: 16),
+        FilledButton.icon(
+          onPressed: _play,
+          icon: Icon(_playing ? Icons.pause : Icons.play_arrow),
+          label: const Text('Play audio'),
+        ),
+        const SizedBox(height: 20),
+        _section('Summary', _summary.summary),
+        _listSection('Key Points', _summary.keyPoints),
+        _listSection('Action Items', _summary.actionItems),
+        _listSection('Keywords', _summary.keywords),
+        Wrap(
+          spacing: 8,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 20, 0),
-              child: Row(
-                children: [
-                  GestureDetector(
-                    onTap: widget.onBack ?? () => Navigator.of(context).pop(),
-                    child: Container(
-                      width: 34,
-                      height: 34,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF7F8FA),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0xFFE2E5EA)),
-                      ),
-                      child: const Icon(
-                        Icons.chevron_left_rounded,
-                        size: 22,
-                        color: Color(0xFF526071),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  const Expanded(
-                    child: Text(
-                      'Recording Detail',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF101828),
-                      ),
-                    ),
-                  ),
-                  if (_isDeleting)
-                    const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  else
-                    IconButton(
-                      onPressed: _confirmDelete,
-                      icon: const Icon(
-                        Icons.delete_outline_rounded,
-                        color: Color(0xFFE05A67),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 24, 24, 30),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      recording.title,
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF101828),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '${recording.eventType} · ${recording.formattedDate}',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFF667085),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      recording.audioPath,
-                      style: const TextStyle(
-                        fontSize: 10,
-                        color: Color(0xFF98A2B3),
-                      ),
-                    ),
-                    const Spacer(),
-                    Center(
-                      child: GestureDetector(
-                        onTap: _isDeleting ? null : _togglePlayback,
-                        child: Container(
-                          width: 76,
-                          height: 76,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF6195F2),
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFF6195F2).withValues(alpha: 0.20),
-                                blurRadius: 0,
-                                spreadRadius: 7,
-                              ),
-                            ],
-                          ),
-                          child: Icon(
-                            _isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                            color: Colors.white,
-                            size: 32,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: progress.clamp(0.0, 1.0),
-                        minHeight: 4,
-                        backgroundColor: const Color(0xFFE9EDF3),
-                        color: const Color(0xFF6195F2),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          _formatDuration(_position),
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: Color(0xFF98A2B3),
-                          ),
-                        ),
-                        Text(
-                          _formatDuration(_totalDuration),
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: Color(0xFF98A2B3),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Spacer(),
-                    _DetailRow(label: 'Status', value: recording.status),
-                    _DetailRow(label: 'Mood', value: recording.mood),
-                    _DetailRow(label: 'Source', value: recording.source),
-                    _DetailRow(label: 'Duration', value: recording.formattedDuration),
-                    if (recording.fileSize != null)
-                      _DetailRow(
-                        label: 'File Size',
-                        value: _formatFileSize(recording.fileSize!),
-                      ),
-                  ],
-                ),
-              ),
-            ),
+            if (_summary.category != null)
+              Chip(label: Text(_summary.category!)),
+            if (_summary.mood != null) Chip(label: Text(_summary.mood!)),
+            if (_summary.actionStatus != null)
+              Chip(label: Text(_summary.actionStatus!)),
           ],
         ),
-      ),
-    );
-  }
+      ],
+    ),
+  );
 
-  static String _formatFileSize(int bytes) {
-    if (bytes < 1024) {
-      return '$bytes B';
-    }
-    if (bytes < 1024 * 1024) {
-      return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    }
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-  }
-}
+  Widget _section(String title, String value) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+      const SizedBox(height: 6),
+      Text(value),
+      const SizedBox(height: 18),
+    ],
+  );
 
-class _DetailRow extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _DetailRow({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(fontSize: 12, color: Color(0xFF667085)),
-          ),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: Color(0xFF101828),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _listSection(String title, List<String> values) => _section(
+    title,
+    values.isEmpty ? 'None' : values.map((value) => '• $value').join('\n'),
+  );
 }

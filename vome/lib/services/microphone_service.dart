@@ -12,7 +12,6 @@ class MicrophoneService {
   static final MicrophoneService instance = MicrophoneService._();
 
   final AudioRecorder _recorder = AudioRecorder();
-  String? _currentTempPath;
 
   Future<bool> requestPermission() async {
     final status = await Permission.microphone.request();
@@ -48,8 +47,6 @@ class MicrophoneService {
       ),
       path: tempPath,
     );
-
-    _currentTempPath = tempPath;
   }
 
   Future<void> pauseRecording() async {
@@ -66,13 +63,11 @@ class MicrophoneService {
 
   Future<String?> stopRecording() async {
     final path = await _recorder.stop();
-    _currentTempPath = null;
     return path;
   }
 
   Future<void> cancelRecording() async {
     final path = await _recorder.stop();
-    _currentTempPath = null;
 
     if (path != null) {
       final file = File(path);

@@ -5,16 +5,14 @@ import 'package:flutter/material.dart';
 import '../models/recording.dart';
 import '../services/microphone_service.dart';
 import '../services/recording_repository.dart';
+import '../services/backend_recording_service.dart';
+import '../services/audio_storage_service.dart';
 
 class RecordingScreen extends StatefulWidget {
   final VoidCallback? onBack;
   final void Function(Recording recording)? onRecordingComplete;
 
-  const RecordingScreen({
-    super.key,
-    this.onBack,
-    this.onRecordingComplete,
-  });
+  const RecordingScreen({super.key, this.onBack, this.onRecordingComplete});
 
   @override
   State<RecordingScreen> createState() => _RecordingScreenState();
@@ -65,9 +63,9 @@ class _RecordingScreenState extends State<RecordingScreen> {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to start recording: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Unable to start recording: $e')));
     }
   }
 
@@ -94,7 +92,9 @@ class _RecordingScreenState extends State<RecordingScreen> {
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Recording too short. Please record again.')),
+          const SnackBar(
+            content: Text('Recording too short. Please record again.'),
+          ),
         );
       }
       return;
@@ -118,6 +118,15 @@ class _RecordingScreenState extends State<RecordingScreen> {
         eventType: _selectedEventType,
         duration: _recordingDuration,
       );
+      await BackendRecordingService.instance.uploadAndProcess(
+        title: _titleController.text.trim().isEmpty
+            ? 'Untitled Recording'
+            : _titleController.text.trim(),
+        category: _selectedEventType,
+        filePath: AudioStorageService.instance.absolutePath(
+          recording.audioPath,
+        ),
+      );
 
       if (!mounted) {
         return;
@@ -139,9 +148,9 @@ class _RecordingScreenState extends State<RecordingScreen> {
         _isPaused = false;
         _isSaving = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to save recording: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to save recording: $e')));
     }
   }
 
@@ -259,15 +268,21 @@ class _RecordingScreenState extends State<RecordingScreen> {
                         fillColor: const Color(0xFFFCFCFD),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(color: Color(0xFFE0E4EA)),
+                          borderSide: const BorderSide(
+                            color: Color(0xFFE0E4EA),
+                          ),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(color: Color(0xFFE0E4EA)),
+                          borderSide: const BorderSide(
+                            color: Color(0xFFE0E4EA),
+                          ),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(color: Color(0xFF6195F2)),
+                          borderSide: const BorderSide(
+                            color: Color(0xFF6195F2),
+                          ),
                         ),
                       ),
                     ),
@@ -298,7 +313,9 @@ class _RecordingScreenState extends State<RecordingScreen> {
                     const SizedBox(height: 38),
                     Center(
                       child: _isSaving
-                          ? const CircularProgressIndicator(color: Color(0xFF6195F2))
+                          ? const CircularProgressIndicator(
+                              color: Color(0xFF6195F2),
+                            )
                           : Text(
                               _formatDuration(_recordingDuration),
                               style: TextStyle(

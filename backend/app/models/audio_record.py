@@ -9,6 +9,7 @@ from app.models.base import Base, UpdatedTimestampMixin
 
 if TYPE_CHECKING:
     from app.models.event import Event
+    from app.models.processing_job import ProcessingJob
     from app.models.transcript import Transcript
 
 
@@ -37,6 +38,12 @@ class AudioRecord(UpdatedTimestampMixin, Base):
 
     event: Mapped[Event] = relationship(back_populates="audio_records")
     transcript: Mapped[Transcript | None] = relationship(
+        back_populates="audio_record",
+        cascade="all, delete-orphan",
+        uselist=False,
+        passive_deletes=True,
+    )
+    processing_job: Mapped[ProcessingJob | None] = relationship(
         back_populates="audio_record",
         cascade="all, delete-orphan",
         uselist=False,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'models/recording.dart';
+import 'services/audio_api_service.dart';
 import 'screens/history_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
@@ -8,6 +9,7 @@ import 'screens/recording_detail_screen.dart';
 import 'screens/recording_screen.dart';
 import 'screens/upload_screen.dart';
 import 'services/audio_storage_service.dart';
+import 'services/auth_service.dart';
 import 'services/database_service.dart';
 import 'services/recording_repository.dart';
 
@@ -15,6 +17,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await DatabaseService.instance.init();
   await AudioStorageService.instance.init();
+  await AuthService.instance.restoreSession();
   runApp(const AudiaryApp());
 }
 
@@ -40,11 +43,7 @@ class AudiaryApp extends StatelessWidget {
 }
 
 class AudiaryScope extends InheritedWidget {
-  const AudiaryScope({
-    super.key,
-    required this.signIn,
-    required super.child,
-  });
+  const AudiaryScope({super.key, required this.signIn, required super.child});
 
   final void Function({String? username}) signIn;
 
@@ -76,26 +75,37 @@ class _AppRootState extends State<AppRoot> {
   int _recordingsThisWeek = 0;
   Duration _totalRecordingTime = Duration.zero;
   List<Recording> _recentRecordings = [];
-  Recording? _selectedRecording;
+  RemoteSummary? _selectedSummary;
   Key _historyRefreshKey = UniqueKey();
 
   @override
   void initState() {
     super.initState();
+    if (AuthService.instance.isAuthenticated) {
+      _screen = _AppScreen.home;
+    }
     _loadDashboardData();
   }
 
   Future<void> _loadDashboardData() async {
-    final count = await RecordingRepository.instance.countRecordingsThisWeek();
-    final totalDuration = await RecordingRepository.instance.totalDurationThisWeek();
-    final recent = await RecordingRepository.instance.getRecentRecordings(limit: 10);
+    try {
+      final count = await RecordingRepository.instance
+          .countRecordingsThisWeek();
+      final totalDuration = await RecordingRepository.instance
+          .totalDurationThisWeek();
+      final recent = await RecordingRepository.instance.getRecentRecordings(
+        limit: 10,
+      );
 
-    if (mounted) {
-      setState(() {
-        _recordingsThisWeek = count;
-        _totalRecordingTime = totalDuration;
-        _recentRecordings = recent;
-      });
+      if (mounted) {
+        setState(() {
+          _recordingsThisWeek = count;
+          _totalRecordingTime = totalDuration;
+          _recentRecordings = recent;
+        });
+      }
+    } catch (_) {
+      // Local storage can be unavailable in the first frame or a new platform.
     }
   }
 
@@ -129,16 +139,26 @@ class _AppRootState extends State<AppRoot> {
     setState(() => _navIndex = index);
   }
 
-  void _openRecordingDetail(Recording recording) {
+  Future<void> _signOut() async {
+    await AuthService.instance.logout();
+    if (mounted) {
+      setState(() {
+        _screen = _AppScreen.login;
+        _navIndex = 0;
+      });
+    }
+  }
+
+  void _openRecordingDetail(RemoteSummary summary) {
     setState(() {
-      _selectedRecording = recording;
+      _selectedSummary = summary;
       _screen = _AppScreen.detail;
     });
   }
 
   void _closeRecordingDetail() {
     setState(() {
-      _selectedRecording = null;
+      _selectedSummary = null;
       _screen = _AppScreen.home;
     });
     _refreshData();
@@ -159,59 +179,61 @@ class _AppRootState extends State<AppRoot> {
     return AudiaryScope(
       signIn: _signIn,
       child: switch (_screen) {
-        _AppScreen.login => const _LoginPage(),
+        _AppScreen.login => LoginScreen(onAuthenticated: _signIn),
         _AppScreen.recording => RecordingScreen(
-            onBack: _closeRecording,
-            onRecordingComplete: _onRecordingComplete,
-          ),
-        _AppScreen.detail when _selectedRecording != null => RecordingDetailScreen(
-            recording: _selectedRecording!,
+          onBack: _closeRecording,
+          onRecordingComplete: _onRecordingComplete,
+        ),
+        _AppScreen.detail when _selectedSummary != null =>
+          RecordingDetailScreen(
+            summary: _selectedSummary!,
             onBack: _closeRecordingDetail,
             onDeleted: _closeRecordingDetail,
           ),
         _AppScreen.home => switch (_navIndex) {
-            1 => HistoryScreen(
-                key: _historyRefreshKey,
-                refreshKey: _historyRefreshKey,
-                currentIndex: _navIndex,
-                onHomeTap: () => _onNavigationTap(0),
-                onHistoryTap: () => _onNavigationTap(1),
-                onUploadTap: () => _onNavigationTap(2),
-                onProfileTap: () => _onNavigationTap(3),
-                onRecordingTap: _openRecordingDetail,
-              ),
-            2 => UploadScreen(
-                onHomeTap: () => _onNavigationTap(0),
-                onHistoryTap: () => _onNavigationTap(1),
-                onUploadTap: () => _onNavigationTap(2),
-                onProfileTap: () => _onNavigationTap(3),
-                onUploadComplete: _onUploadComplete,
-              ),
-            3 => _ProfileTab(
-                currentIndex: _navIndex,
-                onNavigationTap: _onNavigationTap,
-              ),
-            _ => HomeScreen(
-                username: _username,
-                recordingsThisWeek: _recordingsThisWeek,
-                totalRecordingTime: _totalRecordingTime,
-                recentRecordings: _recentRecordings,
-                currentIndex: _navIndex,
-                onNewRecording: _openRecording,
-                onSummaryTap: _openRecordingDetail,
-                onNavigationTap: _onNavigationTap,
-              ),
-          },
-        _ => HomeScreen(
+          1 => HistoryScreen(
+            key: _historyRefreshKey,
+            refreshKey: _historyRefreshKey,
+            currentIndex: _navIndex,
+            onHomeTap: () => _onNavigationTap(0),
+            onHistoryTap: () => _onNavigationTap(1),
+            onUploadTap: () => _onNavigationTap(2),
+            onProfileTap: () => _onNavigationTap(3),
+            onSummaryTap: _openRecordingDetail,
+          ),
+          2 => UploadScreen(
+            onHomeTap: () => _onNavigationTap(0),
+            onHistoryTap: () => _onNavigationTap(1),
+            onUploadTap: () => _onNavigationTap(2),
+            onProfileTap: () => _onNavigationTap(3),
+            onUploadComplete: _onUploadComplete,
+          ),
+          3 => _ProfileTab(
+            currentIndex: _navIndex,
+            onNavigationTap: _onNavigationTap,
+            onLogout: _signOut,
+          ),
+          _ => HomeScreen(
             username: _username,
             recordingsThisWeek: _recordingsThisWeek,
             totalRecordingTime: _totalRecordingTime,
             recentRecordings: _recentRecordings,
             currentIndex: _navIndex,
             onNewRecording: _openRecording,
-            onSummaryTap: _openRecordingDetail,
+            onSummaryTap: null,
             onNavigationTap: _onNavigationTap,
           ),
+        },
+        _ => HomeScreen(
+          username: _username,
+          recordingsThisWeek: _recordingsThisWeek,
+          totalRecordingTime: _totalRecordingTime,
+          recentRecordings: _recentRecordings,
+          currentIndex: _navIndex,
+          onNewRecording: _openRecording,
+          onSummaryTap: null,
+          onNavigationTap: _onNavigationTap,
+        ),
       },
     );
   }
@@ -221,24 +243,37 @@ class _ProfileTab extends StatelessWidget {
   const _ProfileTab({
     required this.currentIndex,
     required this.onNavigationTap,
+    required this.onLogout,
   });
 
   final int currentIndex;
   final void Function(int index) onNavigationTap;
+  final VoidCallback onLogout;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      body: const SafeArea(
+      body: SafeArea(
         child: Center(
-          child: Text(
-            'Profile',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF101828),
-            ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Profile',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF101828),
+                ),
+              ),
+              const SizedBox(height: 20),
+              OutlinedButton.icon(
+                onPressed: onLogout,
+                icon: const Icon(Icons.logout),
+                label: const Text('Log out'),
+              ),
+            ],
           ),
         ),
       ),
@@ -251,10 +286,7 @@ class _ProfileTab extends StatelessWidget {
 }
 
 class _AppBottomNavigation extends StatelessWidget {
-  const _AppBottomNavigation({
-    required this.currentIndex,
-    required this.onTap,
-  });
+  const _AppBottomNavigation({required this.currentIndex, required this.onTap});
 
   final int currentIndex;
   final void Function(int index) onTap;
@@ -302,8 +334,7 @@ class _AppBottomNavigation extends StatelessWidget {
                       color: selected
                           ? const Color(0xFF4C7FF0)
                           : const Color(0xFFA7B0BF),
-                      fontWeight:
-                          selected ? FontWeight.w500 : FontWeight.w400,
+                      fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
                     ),
                   ),
                 ],
@@ -311,39 +342,6 @@ class _AppBottomNavigation extends StatelessWidget {
             ),
           );
         }),
-      ),
-    );
-  }
-}
-
-class _LoginPage extends StatelessWidget {
-  const _LoginPage();
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          const LoginScreen(),
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(32, 0, 32, 282),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(22),
-                  onTap: () => AudiaryScope.of(context).signIn(),
-                  child: const SizedBox(
-                    width: double.infinity,
-                    height: 72,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

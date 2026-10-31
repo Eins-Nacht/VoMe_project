@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../services/auth_service.dart';
+
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  final VoidCallback? onAuthenticated;
+
+  const LoginScreen({super.key, this.onAuthenticated});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -12,6 +16,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _passwordController = TextEditingController();
 
   bool _obscurePassword = true;
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -20,23 +25,78 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _signIn() {
+  Future<void> _signIn() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text;
-
-    // TODO: เชื่อม Auth API ตรงนี้
-    print('Email: $email');
-    print('Password: $password');
+    if (email.isEmpty || password.isEmpty) {
+      _showError('Enter your email and password.');
+      return;
+    }
+    setState(() => _isSubmitting = true);
+    try {
+      await AuthService.instance.login(email: email, password: password);
+      widget.onAuthenticated?.call();
+    } catch (error) {
+      _showError(error.toString());
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
   }
 
-  void _createAccount() {
-    // TODO: ไปหน้า Register
-    print('Create Account');
+  Future<void> _createAccount() async {
+    final displayName = await _askForDisplayName();
+    if (displayName == null || !mounted) return;
+    setState(() => _isSubmitting = true);
+    try {
+      await AuthService.instance.register(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+        displayName: displayName,
+      );
+      widget.onAuthenticated?.call();
+    } catch (error) {
+      _showError(error.toString());
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
   }
 
   void _forgotPassword() {
-    // TODO: ไปหน้า Forgot Password
-    print('Forgot Password');
+    _showError('Password reset is not available yet.');
+  }
+
+  void _showError(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
+  Future<String?> _askForDisplayName() async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Create account'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(labelText: 'Display name'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return result?.isNotEmpty == true ? result : null;
   }
 
   @override
@@ -257,7 +317,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   width: double.infinity,
                   height: 56,
                   child: ElevatedButton(
-                    onPressed: _signIn,
+                    onPressed: _isSubmitting ? null : _signIn,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF6F95EB),
                       foregroundColor: Colors.white,
@@ -266,13 +326,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         borderRadius: BorderRadius.circular(14),
                       ),
                     ),
-                    child: const Text(
-                      'Sign In',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    child: _isSubmitting
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Text('Sign In'),
                   ),
                 ),
 
@@ -285,7 +341,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   width: double.infinity,
                   height: 56,
                   child: ElevatedButton(
-                    onPressed: _createAccount,
+                    onPressed: _isSubmitting ? null : _createAccount,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFF0F4FD),
                       foregroundColor: const Color(0xFF5F89E8),
