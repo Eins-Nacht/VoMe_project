@@ -4,8 +4,9 @@ import '../services/auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
   final VoidCallback? onAuthenticated;
+  final AuthService? authService;
 
-  const LoginScreen({super.key, this.onAuthenticated});
+  const LoginScreen({super.key, this.onAuthenticated, this.authService});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -17,6 +18,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _obscurePassword = true;
   bool _isSubmitting = false;
+  bool _isRegistrationDialogOpen = false;
+
+  AuthService get _authService => widget.authService ?? AuthService.instance;
 
   @override
   void dispose() {
@@ -26,16 +30,18 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _signIn() async {
+    if (_isSubmitting) return;
     final email = _emailController.text.trim();
     final password = _passwordController.text;
-    if (email.isEmpty || password.isEmpty) {
-      _showError('Enter your email and password.');
+    final validationError = _validateCredentials(email, password);
+    if (validationError != null) {
+      _showError(validationError);
       return;
     }
     setState(() => _isSubmitting = true);
     try {
-      await AuthService.instance.login(email: email, password: password);
-      widget.onAuthenticated?.call();
+      await _authService.login(email: email, password: password);
+      if (mounted) widget.onAuthenticated?.call();
     } catch (error) {
       _showError(error.toString());
     } finally {
@@ -44,16 +50,27 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _createAccount() async {
+    if (_isSubmitting || _isRegistrationDialogOpen) return;
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+    final validationError = _validateCredentials(email, password);
+    if (validationError != null) {
+      _showError(validationError);
+      return;
+    }
+
+    _isRegistrationDialogOpen = true;
     final displayName = await _askForDisplayName();
+    _isRegistrationDialogOpen = false;
     if (displayName == null || !mounted) return;
     setState(() => _isSubmitting = true);
     try {
-      await AuthService.instance.register(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
+      await _authService.register(
+        email: email,
+        password: password,
         displayName: displayName,
       );
-      widget.onAuthenticated?.call();
+      if (mounted) widget.onAuthenticated?.call();
     } catch (error) {
       _showError(error.toString());
     } finally {
@@ -73,30 +90,27 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  String? _validateCredentials(String email, String password) {
+    if (email.isEmpty || password.isEmpty) {
+      return 'Enter your email and password.';
+    }
+    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
+      return 'Enter a valid email address.';
+    }
+    if (password.length < 8) {
+      return 'Password must be at least 8 characters.';
+    }
+    if (password.length > 128) {
+      return 'Password must be 128 characters or fewer.';
+    }
+    return null;
+  }
+
   Future<String?> _askForDisplayName() async {
-    final controller = TextEditingController();
-    final result = await showDialog<String>(
+    return showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Create account'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(labelText: 'Display name'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('Continue'),
-          ),
-        ],
-      ),
+      builder: (_) => const _DisplayNameDialog(),
     );
-    controller.dispose();
-    return result?.isNotEmpty == true ? result : null;
   }
 
   @override
@@ -379,6 +393,63 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _DisplayNameDialog extends StatefulWidget {
+  const _DisplayNameDialog();
+
+  @override
+  State<_DisplayNameDialog> createState() => _DisplayNameDialogState();
+}
+
+class _DisplayNameDialogState extends State<_DisplayNameDialog> {
+  final _controller = TextEditingController();
+  String? _errorText;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final displayName = _controller.text.trim();
+    if (displayName.isEmpty) {
+      setState(() => _errorText = 'Enter a display name.');
+      return;
+    }
+    if (displayName.length > 100) {
+      setState(
+        () => _errorText = 'Display name must be 100 characters or fewer.',
+      );
+      return;
+    }
+    Navigator.of(context).pop(displayName);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Create account'),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        maxLength: 100,
+        decoration: InputDecoration(
+          labelText: 'Display name',
+          errorText: _errorText,
+        ),
+        onSubmitted: (_) => _submit(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(onPressed: _submit, child: const Text('Continue')),
+      ],
     );
   }
 }
