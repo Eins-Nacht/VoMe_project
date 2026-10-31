@@ -54,8 +54,10 @@ class AuthService {
   final http.Client _client;
   final AuthTokenStore _tokenStore;
   String? _token;
+  String? _displayName;
 
   String? get token => _token;
+  String? get displayName => _displayName;
   bool get isAuthenticated => _token != null;
 
   Future<bool> restoreSession() async {
@@ -76,10 +78,12 @@ class AuthService {
     if (response.statusCode != 200) {
       throw AuthException(_message(response));
     }
-    await _saveToken(
-      (jsonDecode(response.body) as Map<String, dynamic>)['access_token']
-          as String,
-    );
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final responseDisplayName = body['display_name'] as String?;
+    if (responseDisplayName != null && responseDisplayName.trim().isNotEmpty) {
+      _displayName = responseDisplayName.trim();
+    }
+    await _saveToken(body['access_token'] as String);
   }
 
   Future<void> register({
@@ -100,11 +104,13 @@ class AuthService {
     if (response.statusCode != 201) {
       throw AuthException(_message(response));
     }
+    _displayName = displayName.trim();
     await login(email: email, password: password, baseUrl: baseUrl);
   }
 
   Future<void> logout() async {
     _token = null;
+    _displayName = null;
     await _tokenStore.delete(key: _tokenKey);
   }
 

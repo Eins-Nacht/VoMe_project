@@ -12,6 +12,7 @@ import 'services/audio_storage_service.dart';
 import 'services/auth_service.dart';
 import 'services/database_service.dart';
 import 'services/recording_repository.dart';
+import 'services/remote_summary_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -70,11 +71,11 @@ class _AppRootState extends State<AppRoot> {
   _AppScreen _screen = _AppScreen.login;
 
   int _navIndex = 0;
-  String _username = 'Alex';
-
   int _recordingsThisWeek = 0;
   Duration _totalRecordingTime = Duration.zero;
   List<Recording> _recentRecordings = [];
+  List<RemoteSummary> _recentSummaries = [];
+  String? _summaryLoadError;
   RemoteSummary? _selectedSummary;
   Key _historyRefreshKey = UniqueKey();
 
@@ -96,12 +97,24 @@ class _AppRootState extends State<AppRoot> {
       final recent = await RecordingRepository.instance.getRecentRecordings(
         limit: 10,
       );
+      List<RemoteSummary> summaries = [];
+      String? summaryError;
+      final api = RemoteSummaryService.instance.api;
+      if (api != null) {
+        try {
+          summaries = await api.listSummaries(limit: 3);
+        } catch (_) {
+          summaryError = 'unavailable';
+        }
+      }
 
       if (mounted) {
         setState(() {
           _recordingsThisWeek = count;
           _totalRecordingTime = totalDuration;
           _recentRecordings = recent;
+          _recentSummaries = summaries;
+          _summaryLoadError = summaryError;
         });
       }
     } catch (_) {
@@ -118,10 +131,6 @@ class _AppRootState extends State<AppRoot> {
 
   void _signIn({String? username}) {
     setState(() {
-      if (username != null && username.isNotEmpty) {
-        final localPart = username.split('@').first;
-        _username = localPart.isEmpty ? _username : localPart;
-      }
       _screen = _AppScreen.home;
     });
     _loadDashboardData();
@@ -214,24 +223,40 @@ class _AppRootState extends State<AppRoot> {
             onLogout: _signOut,
           ),
           _ => HomeScreen(
-            username: _username,
             recordingsThisWeek: _recordingsThisWeek,
             totalRecordingTime: _totalRecordingTime,
-            recentRecordings: _recentRecordings,
+            recentSummaries: _recentSummaries,
+            processingRecordings: _recentRecordings
+                .where(
+                  (recording) =>
+                      recording.status != 'Completed' &&
+                      recording.status != 'Failed',
+                )
+                .toList(),
+            summaryLoadError: _summaryLoadError,
             currentIndex: _navIndex,
             onNewRecording: _openRecording,
-            onSummaryTap: null,
+            onSeeAll: () => _onNavigationTap(1),
+            onSummaryTap: _openRecordingDetail,
             onNavigationTap: _onNavigationTap,
           ),
         },
         _ => HomeScreen(
-          username: _username,
           recordingsThisWeek: _recordingsThisWeek,
           totalRecordingTime: _totalRecordingTime,
-          recentRecordings: _recentRecordings,
+          recentSummaries: _recentSummaries,
+          processingRecordings: _recentRecordings
+              .where(
+                (recording) =>
+                    recording.status != 'Completed' &&
+                    recording.status != 'Failed',
+              )
+              .toList(),
+          summaryLoadError: _summaryLoadError,
           currentIndex: _navIndex,
           onNewRecording: _openRecording,
-          onSummaryTap: null,
+          onSeeAll: () => _onNavigationTap(1),
+          onSummaryTap: _openRecordingDetail,
           onNavigationTap: _onNavigationTap,
         ),
       },

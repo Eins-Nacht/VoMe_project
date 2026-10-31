@@ -1,24 +1,29 @@
 import 'package:flutter/material.dart';
 
 import '../models/recording.dart';
+import '../services/audio_api_service.dart';
 
 class HomeScreen extends StatelessWidget {
-  final String username;
   final int recordingsThisWeek;
   final Duration totalRecordingTime;
-  final List<Recording> recentRecordings;
+  final List<RemoteSummary> recentSummaries;
+  final List<Recording> processingRecordings;
+  final String? summaryLoadError;
   final VoidCallback? onNewRecording;
-  final void Function(Recording recording)? onSummaryTap;
+  final VoidCallback? onSeeAll;
+  final void Function(RemoteSummary summary)? onSummaryTap;
   final int currentIndex;
   final void Function(int index)? onNavigationTap;
 
   const HomeScreen({
     super.key,
-    required this.username,
     this.recordingsThisWeek = 0,
     this.totalRecordingTime = Duration.zero,
-    this.recentRecordings = const [],
+    this.recentSummaries = const [],
+    this.processingRecordings = const [],
+    this.summaryLoadError,
     this.onNewRecording,
+    this.onSeeAll,
     this.onSummaryTap,
     this.currentIndex = 0,
     this.onNavigationTap,
@@ -26,173 +31,104 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final hasActivity =
+        recentSummaries.isNotEmpty || processingRecordings.isNotEmpty;
+
     return Scaffold(
       backgroundColor: Colors.white,
-
       body: SafeArea(
         bottom: false,
         child: Column(
           children: [
-            // ==================================================
-            // MAIN CONTENT
-            // ==================================================
-
             Expanded(
               child: SingleChildScrollView(
                 child: Column(
                   children: [
-                    // ==========================================
-                    // BLUE HEADER
-                    // ==========================================
-
-                    _Header(
-                      username: username,
-                      summaryCount: recentRecordings.length,
-                    ),
-
-                    // ==========================================
-                    // CONTENT
-                    // ==========================================
-
+                    const _Header(),
                     Transform.translate(
                       offset: const Offset(0, -17),
-
                       child: Container(
                         width: double.infinity,
-
                         decoration: const BoxDecoration(
                           color: Colors.white,
-
                           borderRadius: BorderRadius.only(
                             topLeft: Radius.circular(22),
                             topRight: Radius.circular(22),
                           ),
                         ),
-
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(
-                            18,
-                            0,
-                            18,
-                            25,
-                          ),
-
-                          child: Column(
-                            crossAxisAlignment:
-                                CrossAxisAlignment.start,
-
-                            children: [
-                              // ==================================
-                              // NEW RECORDING
-                              // ==================================
-
-                              _NewRecordingCard(
-                                onTap: onNewRecording,
-                              ),
-
-                              const SizedBox(height: 18),
-
-                              // ==================================
-                              // STATISTICS
-                              // ==================================
-
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: _StatCard(
-                                      value:
-                                          recordingsThisWeek
-                                              .toString(),
-
-                                      label: 'recordings',
-
-                                      footer: 'This Week',
-                                    ),
+                        padding: const EdgeInsets.fromLTRB(18, 0, 18, 25),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _NewRecordingCard(onTap: onNewRecording),
+                            const SizedBox(height: 18),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _StatCard(
+                                    value: recordingsThisWeek.toString(),
+                                    label: 'local recordings',
+                                    footer: 'This Week',
                                   ),
-
-                                  const SizedBox(width: 10),
-
-                                  Expanded(
-                                    child: _StatCard(
-                                      value:
-                                          _formatDuration(
-                                        totalRecordingTime,
-                                      ),
-
-                                      label: 'captured',
-
-                                      footer: 'Total Time',
-                                    ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: _StatCard(
+                                    value: _formatDuration(totalRecordingTime),
+                                    label: 'local audio',
+                                    footer: 'This Week',
                                   ),
-                                ],
-                              ),
-
-                              const SizedBox(height: 23),
-
-                              // ==================================
-                              // RECENT SUMMARIES TITLE
-                              // ==================================
-
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment
-                                        .spaceBetween,
-
-                                children: [
-                                  const Text(
-                                    'Recent Summaries',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight:
-                                          FontWeight.w600,
-                                      color:
-                                          Color(0xFF101828),
-                                    ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 23),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  'Recent Summaries',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF101828),
                                   ),
-
-                                  GestureDetector(
-                                    onTap: () {
-                                      // TODO:
-                                      // ไปหน้า History / All Summaries
-                                    },
-
-                                    child: const Text(
-                                      'See all',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color:
-                                            Color(0xFF4C7FF0),
-                                        fontWeight:
-                                            FontWeight.w500,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-
-                              const SizedBox(height: 12),
-
-                              // ==================================
-                              // RECENT SUMMARIES
-                              // ==================================
-
-                              ...recentRecordings
+                                ),
+                                TextButton(
+                                  onPressed: onSeeAll,
+                                  child: const Text('See all'),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            if (summaryLoadError != null)
+                              _MessageCard(
+                                icon: Icons.cloud_off_outlined,
+                                message: 'Summaries are unavailable right now.',
+                              )
+                            else if (recentSummaries.isNotEmpty)
+                              ...recentSummaries
                                   .take(3)
                                   .map(
-                                    (recording) {
-                                      return Padding(
-                                        padding: const EdgeInsets.only(bottom: 10),
-                                        child: _SummaryCard(
-                                          recording: recording,
-                                          onTap: () {
-                                            onSummaryTap?.call(recording);
-                                          },
-                                        ),
-                                      );
-                                    },
-                                  ),
-                            ],
-                          ),
+                                    (summary) => Padding(
+                                      padding: const EdgeInsets.only(
+                                        bottom: 10,
+                                      ),
+                                      child: _SummaryCard(
+                                        summary: summary,
+                                        onTap: () =>
+                                            onSummaryTap?.call(summary),
+                                      ),
+                                    ),
+                                  )
+                            else if (processingRecordings.isNotEmpty)
+                              _ProcessingCard(recordings: processingRecordings)
+                            else if (!hasActivity)
+                              const _MessageCard(
+                                icon: Icons.mic_none_rounded,
+                                message:
+                                    'No recordings or summaries yet. Start a recording to see your activity here.',
+                              ),
+                          ],
                         ),
                       ),
                     ),
@@ -200,11 +136,6 @@ class HomeScreen extends StatelessWidget {
                 ),
               ),
             ),
-
-            // ==================================================
-            // BOTTOM NAVIGATION
-            // ==================================================
-
             _BottomNavigation(
               currentIndex: currentIndex,
               onTap: onNavigationTap,
@@ -215,117 +146,36 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  // ============================================================
-  // FORMAT DURATION
-  // ============================================================
-
   static String _formatDuration(Duration duration) {
     final hours = duration.inHours;
     final minutes = duration.inMinutes.remainder(60);
-
-    if (hours > 0) {
-      return '${hours}h ${minutes}m';
-    }
-
-    return '${minutes}m';
+    return hours > 0 ? '${hours}h ${minutes}m' : '${minutes}m';
   }
 }
 
-
-// ================================================================
-// HEADER
-// ================================================================
-
 class _Header extends StatelessWidget {
-  final String username;
-  final int summaryCount;
-
-  const _Header({
-    required this.username,
-    this.summaryCount = 0,
-  });
+  const _Header();
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-
-      padding: const EdgeInsets.fromLTRB(
-        22,
-        18,
-        22,
-        34,
-      ),
-
-      decoration: const BoxDecoration(
-        color: Color(0xFF6195F2),
-
-        borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(0),
-          bottomRight: Radius.circular(0),
-        ),
-      ),
-
+      padding: const EdgeInsets.fromLTRB(22, 18, 22, 34),
+      color: const Color(0xFF6195F2),
       child: Column(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
-
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Good morning + notification
-          Row(
-            mainAxisAlignment:
-                MainAxisAlignment.spaceBetween,
-
-            children: [
-              const Text(
-                'Good morning ☀️',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w400,
-                ),
-              ),
-
-              Container(
-                width: 32,
-                height: 32,
-
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.16),
-                  shape: BoxShape.circle,
-                ),
-
-                child: const Icon(
-                  Icons.notifications_rounded,
-                  size: 17,
-                  color: Color(0xFFFFD76A),
-                ),
-              ),
-            ],
+          const Text(
+            'Welcome back,',
+            style: TextStyle(color: Colors.white, fontSize: 12),
           ),
-
           const SizedBox(height: 9),
-
-          // Hello, username
-          Text(
-            'Hello, $username 👋',
-            style: const TextStyle(
+          const Text(
+            'want to record again?',
+            style: TextStyle(
               color: Colors.white,
               fontSize: 22,
               fontWeight: FontWeight.w700,
-            ),
-          ),
-
-          const SizedBox(height: 4),
-
-          // Saved summaries
-          Text(
-            summaryCount == 1
-                ? 'You have 1 saved summary'
-                : 'You have $summaryCount saved summaries',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.85),
-              fontSize: 12,
             ),
           ),
         ],
@@ -334,38 +184,24 @@ class _Header extends StatelessWidget {
   }
 }
 
-
-// ================================================================
-// NEW RECORDING CARD
-// ================================================================
-
 class _NewRecordingCard extends StatelessWidget {
   final VoidCallback? onTap;
 
-  const _NewRecordingCard({
-    this.onTap,
-  });
+  const _NewRecordingCard({this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return Material(
       color: Colors.transparent,
-
       child: InkWell(
         onTap: onTap,
-
         borderRadius: BorderRadius.circular(18),
-
         child: Container(
           width: double.infinity,
-
           padding: const EdgeInsets.all(18),
-
           decoration: BoxDecoration(
             color: Colors.white,
-
             borderRadius: BorderRadius.circular(18),
-
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.06),
@@ -374,73 +210,31 @@ class _NewRecordingCard extends StatelessWidget {
               ),
             ],
           ),
-
-          child: Row(
+          child: const Row(
             children: [
-              // Microphone
-              Container(
-                width: 48,
-                height: 48,
-
-                decoration: BoxDecoration(
-                  color: const Color(0xFF6195F2),
-                  borderRadius:
-                      BorderRadius.circular(14),
-
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF6195F2)
-                          .withValues(alpha: 0.25),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-
-                child: const Icon(
-                  Icons.mic_rounded,
-                  color: Colors.white,
-                  size: 23,
-                ),
-              ),
-
-              const SizedBox(width: 15),
-
-              // Text
-              const Expanded(
+              _ActionIcon(icon: Icons.mic_rounded),
+              SizedBox(width: 15),
+              Expanded(
                 child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
-
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       'New Recording',
                       style: TextStyle(
                         fontSize: 15,
-                        fontWeight:
-                            FontWeight.w600,
+                        fontWeight: FontWeight.w600,
                         color: Color(0xFF111827),
                       ),
                     ),
-
                     SizedBox(height: 4),
-
                     Text(
                       'Tap to start capturing audio',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFF9AA1AE),
-                      ),
+                      style: TextStyle(fontSize: 12, color: Color(0xFF9AA1AE)),
                     ),
                   ],
                 ),
               ),
-
-              const Icon(
-                Icons.chevron_right_rounded,
-                color: Color(0xFFB8C0CD),
-                size: 21,
-              ),
+              Icon(Icons.chevron_right_rounded, color: Color(0xFFB8C0CD)),
             ],
           ),
         ),
@@ -449,10 +243,24 @@ class _NewRecordingCard extends StatelessWidget {
   }
 }
 
+class _ActionIcon extends StatelessWidget {
+  final IconData icon;
 
-// ================================================================
-// STAT CARD
-// ================================================================
+  const _ActionIcon({required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        color: const Color(0xFF6195F2),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Icon(icon, color: Colors.white, size: 23),
+    );
+  }
+}
 
 class _StatCard extends StatelessWidget {
   final String value;
@@ -469,23 +277,13 @@ class _StatCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: 82,
-
-      padding: const EdgeInsets.fromLTRB(
-        14,
-        10,
-        10,
-        9,
-      ),
-
+      padding: const EdgeInsets.fromLTRB(14, 10, 10, 9),
       decoration: BoxDecoration(
         color: const Color(0xFFEAF1FF),
         borderRadius: BorderRadius.circular(12),
       ),
-
       child: Column(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
-
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             value,
@@ -495,24 +293,14 @@ class _StatCard extends StatelessWidget {
               fontWeight: FontWeight.w700,
             ),
           ),
-
           Text(
             label,
-            style: const TextStyle(
-              color: Color(0xFF8893A5),
-              fontSize: 10,
-            ),
+            style: const TextStyle(color: Color(0xFF8893A5), fontSize: 10),
           ),
-
           const Spacer(),
-
           Text(
             footer,
-            style: const TextStyle(
-              color: Color(0xFF202938),
-              fontSize: 10,
-              fontWeight: FontWeight.w400,
-            ),
+            style: const TextStyle(color: Color(0xFF202938), fontSize: 10),
           ),
         ],
       ),
@@ -520,128 +308,65 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-
-// ================================================================
-// SUMMARY CARD
-// ================================================================
-
 class _SummaryCard extends StatelessWidget {
-  final Recording recording;
+  final RemoteSummary summary;
   final VoidCallback? onTap;
 
-  const _SummaryCard({
-    required this.recording,
-    this.onTap,
-  });
+  const _SummaryCard({required this.summary, this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return Material(
       color: Colors.white,
-
       child: InkWell(
         onTap: onTap,
-
         borderRadius: BorderRadius.circular(14),
-
         child: Container(
           width: double.infinity,
-
-          padding: const EdgeInsets.fromLTRB(
-            14,
-            12,
-            14,
-            11,
-          ),
-
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 11),
           decoration: BoxDecoration(
-            border: Border.all(
-              color: const Color(0xFFE9EDF3),
-              width: 1,
-            ),
-
+            border: Border.all(color: const Color(0xFFE9EDF3)),
             borderRadius: BorderRadius.circular(14),
           ),
-
           child: Column(
-            crossAxisAlignment:
-                CrossAxisAlignment.start,
-
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ================================================
-              // TITLE + MOOD
-              // ================================================
-
               Row(
-                crossAxisAlignment:
-                    CrossAxisAlignment.center,
-
                 children: [
-                  const Text(
-                    '📁',
-                    style: TextStyle(
-                      fontSize: 15,
-                    ),
-                  ),
-
+                  const Text('📁', style: TextStyle(fontSize: 15)),
                   const SizedBox(width: 7),
-
                   Expanded(
                     child: Text(
-                      recording.title,
+                      summary.eventTitle,
                       maxLines: 1,
-                      overflow:
-                          TextOverflow.ellipsis,
-
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 14,
-                        fontWeight:
-                            FontWeight.w600,
-                        color: Color(0xFF101828),
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF202938),
                       ),
                     ),
                   ),
-
-                  const SizedBox(width: 5),
-
-                  _MoodBadge(
-                    mood: recording.mood,
-                  ),
+                  if (summary.mood != null) _MoodBadge(mood: summary.mood!),
                 ],
               ),
-
               const SizedBox(height: 8),
-
-              // ================================================
-              // TYPE + STATUS
-              // ================================================
-
+              Text(
+                summary.summary,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 11, color: Color(0xFF687080)),
+              ),
+              const SizedBox(height: 8),
               Row(
                 children: [
-                  _TypeBadge(
-                    text: recording.eventType,
-                  ),
-
-                  const SizedBox(width: 7),
-
-                  _StatusBadge(
-                    text: recording.status,
-                  ),
+                  if (summary.category != null)
+                    _Badge(text: summary.category!, blue: true),
+                  if (summary.actionStatus != null) ...[
+                    const SizedBox(width: 7),
+                    _Badge(text: summary.actionStatus!, blue: false),
+                  ],
                 ],
-              ),
-
-              const SizedBox(height: 8),
-
-              // ================================================
-              // DATE + DURATION
-              // ================================================
-
-              Text(
-                '${recording.formattedDate} · ${recording.formattedDuration}',
-                style: const TextStyle(
-                  fontSize: 10,
-                  color: Color(0xFF919AAA),
-                ),
               ),
             ],
           ),
@@ -651,113 +376,81 @@ class _SummaryCard extends StatelessWidget {
   }
 }
 
-
-// ================================================================
-// MOOD BADGE
-// ================================================================
-
 class _MoodBadge extends StatelessWidget {
   final String mood;
 
-  const _MoodBadge({
-    required this.mood,
-  });
+  const _MoodBadge({required this.mood});
 
   @override
   Widget build(BuildContext context) {
-    final bool positive =
-        mood.toLowerCase() == 'positive';
-
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 7,
-        vertical: 3,
-      ),
-
-      decoration: BoxDecoration(
-        color: positive
-            ? const Color(0xFFE9FAF1)
-            : const Color(0xFFF3F3F5),
-
-        borderRadius: BorderRadius.circular(20),
-      ),
-
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-
-        children: [
-          Container(
-            width: 5,
-            height: 5,
-
-            decoration: BoxDecoration(
-              color: positive
-                  ? const Color(0xFF35C77A)
-                  : const Color(0xFF9AA0AA),
-
-              shape: BoxShape.circle,
-            ),
-          ),
-
-          const SizedBox(width: 4),
-
-          Text(
-            mood,
-            style: TextStyle(
-              fontSize: 9,
-              color: positive
-                  ? const Color(0xFF22965A)
-                  : const Color(0xFF687080),
-            ),
-          ),
-        ],
-      ),
-    );
+    return _Badge(text: mood, blue: false);
   }
 }
 
-
-// ================================================================
-// TYPE BADGE
-// ================================================================
-
-class _TypeBadge extends StatelessWidget {
+class _Badge extends StatelessWidget {
   final String text;
+  final bool blue;
 
-  const _TypeBadge({
-    required this.text,
-  });
+  const _Badge({required this.text, required this.blue});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 7,
-        vertical: 3,
-      ),
-
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
-        color: const Color(0xFFEAF1FF),
+        color: blue ? const Color(0xFFEAF1FF) : const Color(0xFFF3F3F5),
         borderRadius: BorderRadius.circular(20),
       ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 9,
+          color: blue ? const Color(0xFF4C7FF0) : const Color(0xFF687080),
+        ),
+      ),
+    );
+  }
+}
 
+class _ProcessingCard extends StatelessWidget {
+  final List<Recording> recordings;
+
+  const _ProcessingCard({required this.recordings});
+
+  @override
+  Widget build(BuildContext context) {
+    return _MessageCard(
+      icon: Icons.sync_rounded,
+      message: recordings.length == 1
+          ? '1 recording is still processing.'
+          : '${recordings.length} recordings are still processing.',
+    );
+  }
+}
+
+class _MessageCard extends StatelessWidget {
+  final IconData icon;
+  final String message;
+
+  const _MessageCard({required this.icon, required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7F9FC),
+        borderRadius: BorderRadius.circular(14),
+      ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
-
         children: [
-          const Icon(
-            Icons.chat_bubble_outline_rounded,
-            size: 9,
-            color: Color(0xFF4C7FF0),
-          ),
-
-          const SizedBox(width: 3),
-
-          Text(
-            text,
-            style: const TextStyle(
-              fontSize: 9,
-              color: Color(0xFF4C7FF0),
+          Icon(icon, color: const Color(0xFF4C7FF0)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(fontSize: 12, color: Color(0xFF687080)),
             ),
           ),
         ],
@@ -765,179 +458,62 @@ class _TypeBadge extends StatelessWidget {
     );
   }
 }
-
-
-// ================================================================
-// STATUS BADGE
-// ================================================================
-
-class _StatusBadge extends StatelessWidget {
-  final String text;
-
-  const _StatusBadge({
-    required this.text,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final bool completed =
-        text.toLowerCase() == 'completed';
-
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 7,
-        vertical: 3,
-      ),
-
-      decoration: BoxDecoration(
-        color: completed
-            ? const Color(0xFFE8F8EF)
-            : const Color(0xFFFFF7E2),
-
-        borderRadius: BorderRadius.circular(20),
-      ),
-
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-
-        children: [
-          Icon(
-            completed
-                ? Icons.check_box_outlined
-                : Icons.circle,
-            size: 9,
-
-            color: completed
-                ? const Color(0xFF25A765)
-                : const Color(0xFFD69B26),
-          ),
-
-          const SizedBox(width: 3),
-
-          Text(
-            text,
-            style: TextStyle(
-              fontSize: 9,
-
-              color: completed
-                  ? const Color(0xFF22965A)
-                  : const Color(0xFFB27A16),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-
-// ================================================================
-// BOTTOM NAVIGATION
-// ================================================================
 
 class _BottomNavigation extends StatelessWidget {
   final int currentIndex;
   final void Function(int index)? onTap;
 
-  const _BottomNavigation({
-    required this.currentIndex,
-    this.onTap,
-  });
+  const _BottomNavigation({required this.currentIndex, this.onTap});
 
   @override
   Widget build(BuildContext context) {
     const items = [
-      (
-        icon: Icons.grid_view_rounded,
-        label: 'Home',
-      ),
-      (
-        icon: Icons.history_rounded,
-        label: 'History',
-      ),
-      (
-        icon: Icons.arrow_upward_rounded,
-        label: 'Upload',
-      ),
-      (
-        icon: Icons.person_outline_rounded,
-        label: 'Profile',
-      ),
+      (icon: Icons.grid_view_rounded, label: 'Home'),
+      (icon: Icons.history_rounded, label: 'History'),
+      (icon: Icons.arrow_upward_rounded, label: 'Upload'),
+      (icon: Icons.person_outline_rounded, label: 'Profile'),
     ];
 
     return Container(
       height: 68,
-
       decoration: const BoxDecoration(
         color: Colors.white,
-
-        border: Border(
-          top: BorderSide(
-            color: Color(0xFFE9EDF3),
-            width: 1,
-          ),
-        ),
+        border: Border(top: BorderSide(color: Color(0xFFE9EDF3))),
       ),
-
       child: Row(
-        mainAxisAlignment:
-            MainAxisAlignment.spaceAround,
-
-        children: List.generate(
-          items.length,
-          (index) {
-            final selected =
-                currentIndex == index;
-
-            return GestureDetector(
-              onTap: () {
-                onTap?.call(index);
-              },
-
-              behavior:
-                  HitTestBehavior.opaque,
-
-              child: SizedBox(
-                width: 65,
-
-                child: Column(
-                  mainAxisAlignment:
-                      MainAxisAlignment.center,
-
-                  children: [
-                    Icon(
-                      items[index].icon,
-
-                      size: 19,
-
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: List.generate(items.length, (index) {
+          final selected = currentIndex == index;
+          return GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => onTap?.call(index),
+            child: SizedBox(
+              width: 65,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    items[index].icon,
+                    size: 19,
+                    color: selected
+                        ? const Color(0xFF4C7FF0)
+                        : const Color(0xFFA7B0BF),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    items[index].label,
+                    style: TextStyle(
+                      fontSize: 9,
                       color: selected
                           ? const Color(0xFF4C7FF0)
                           : const Color(0xFFA7B0BF),
                     ),
-
-                    const SizedBox(height: 4),
-
-                    Text(
-                      items[index].label,
-
-                      style: TextStyle(
-                        fontSize: 9,
-
-                        color: selected
-                            ? const Color(0xFF4C7FF0)
-                            : const Color(0xFFA7B0BF),
-
-                        fontWeight: selected
-                            ? FontWeight.w500
-                            : FontWeight.w400,
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            );
-          },
-        ),
+            ),
+          );
+        }),
       ),
     );
   }
