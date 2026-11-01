@@ -9,7 +9,11 @@ never stored in the database.
 
 from app.models.audio_record import AudioRecord
 from app.models.event import Event
-from app.models.processing_job import ProcessingJob, ProcessingStatus
+from app.models.processing_job import (
+    ProcessingJob,
+    ProcessingStatus,
+    TranscriptionStatus,
+)
 from app.models.user import User
 from app.models.summary import ActionStatus, Mood, Summary
 from app.models.transcript import Transcript
@@ -21,6 +25,7 @@ __all__ = [
     "Mood",
     "ProcessingJob",
     "ProcessingStatus",
+    "TranscriptionStatus",
     "Summary",
     "Transcript",
     "User",

@@ -114,6 +114,25 @@ def get_processing_status(
     return _owned_job(db, current_user, job_id)
 
 
+@router.delete("/{job_id}", response_model=ProcessingJobResponse)
+def cancel_processing(
+    job_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    job = _owned_job(db, current_user, job_id)
+    if job.status in (ProcessingStatus.COMPLETED, ProcessingStatus.FAILED):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only active processing jobs can be cancelled",
+        )
+    job.status = ProcessingStatus.CANCELLED
+    job.error_message = "Processing cancelled by user"
+    db.commit()
+    db.refresh(job)
+    return job
+
+
 @router.get("/{job_id}/result", response_model=ProcessingResultResponse)
 def get_processing_result(
     job_id: int,
@@ -147,6 +166,7 @@ def get_processing_result(
         id=job.id,
         audio_record_id=job.audio_record_id,
         status=job.status,
+        transcription_status=job.transcription_status,
         error_message=job.error_message,
         created_at=job.created_at,
         updated_at=job.updated_at,
@@ -164,4 +184,5 @@ def get_processing_result(
         action_status=summary.action_status.value
         if summary and summary.action_status
         else None,
+        message=job.error_message,
     )

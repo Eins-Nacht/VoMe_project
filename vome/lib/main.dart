@@ -183,6 +183,43 @@ class _AppRootState extends State<AppRoot> with WidgetsBindingObserver {
     _refreshData();
   }
 
+  Future<void> _deleteProcessing(Recording recording) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          recording.status == 'Pending' || recording.status == 'Processing'
+              ? 'Cancel processing?'
+              : 'Delete recording?',
+        ),
+        content: const Text(
+          'This recording and its processing data will be removed.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ProcessingService.instance.cancelAndDelete(recording);
+      _refreshData();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$error')));
+      }
+    }
+  }
+
   Future<void> _openCompletedProcessing(Recording recording) async {
     try {
       final summary = await ProcessingService.instance.fetchResult(recording);
@@ -265,6 +302,7 @@ class _AppRootState extends State<AppRoot> with WidgetsBindingObserver {
             _refreshData();
           },
           onRetry: _retryProcessing,
+          onDelete: _deleteProcessing,
           onCompletedTap: _openCompletedProcessing,
         ),
         _AppScreen.detail when _selectedSummary != null =>
@@ -286,6 +324,7 @@ class _AppRootState extends State<AppRoot> with WidgetsBindingObserver {
             processingRecordings: _activeProcessingRecordings,
             onProcessingTap: (_) => _openProcessingStatus(),
             onRetryProcessing: _retryProcessing,
+            onDeleteProcessing: _deleteProcessing,
           ),
           2 => UploadScreen(
             onHomeTap: () => _onNavigationTap(0),
@@ -312,6 +351,7 @@ class _AppRootState extends State<AppRoot> with WidgetsBindingObserver {
             processingRecordings: _activeProcessingRecordings,
             onProcessingTap: (_) => _openProcessingStatus(),
             onRetryProcessing: _retryProcessing,
+            onDeleteProcessing: _deleteProcessing,
             onNavigationTap: _onNavigationTap,
           ),
         },

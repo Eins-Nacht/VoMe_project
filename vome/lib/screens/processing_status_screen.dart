@@ -7,6 +7,7 @@ class ProcessingStatusScreen extends StatelessWidget {
   final List<Recording> recordings;
   final Future<void> Function(Recording recording)? onRetry;
   final Future<void> Function(Recording recording)? onCompletedTap;
+  final Future<void> Function(Recording recording)? onDelete;
   final Future<void> Function()? onRefresh;
   final VoidCallback? onBack;
 
@@ -15,6 +16,7 @@ class ProcessingStatusScreen extends StatelessWidget {
     required this.recordings,
     this.onRetry,
     this.onCompletedTap,
+    this.onDelete,
     this.onRefresh,
     this.onBack,
   });
@@ -47,6 +49,9 @@ class ProcessingStatusScreen extends StatelessWidget {
                       onTap: recording.status == 'Completed'
                           ? () => onCompletedTap?.call(recording)
                           : null,
+                      onDelete: onDelete == null
+                          ? null
+                          : () => onDelete!(recording),
                     ),
                   ),
                 ],

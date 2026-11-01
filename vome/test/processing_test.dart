@@ -61,6 +61,35 @@ void main() {
     await tester.tap(find.text('Retry'));
     expect(retried, isTrue);
   });
+
+  testWidgets('renders no-speech outcome without retry action', (tester) async {
+    final recording = _Recording(
+      id: 'no-speech-id',
+      title: 'Silent recording',
+      eventType: 'Meeting',
+      durationMs: 1000,
+      audioPath: 'audio/silent.m4a',
+      source: 'recorded',
+      processingJobId: '5',
+      status: 'Failed',
+      processingError: 'no_speech|No speech was found in this audio file.',
+    );
+    var retried = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProcessingStatusCard(
+            recording: recording,
+            onRetry: () => retried = true,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.textContaining('No speech detected'), findsOneWidget);
+    expect(find.text('Retry'), findsNothing);
+    expect(retried, isFalse);
+  });
 }
 
 class RecordingFixture {
@@ -86,5 +115,6 @@ class _Recording extends Recording {
     required super.source,
     required super.processingJobId,
     required super.status,
+    super.processingError,
   }) : super(createdAt: DateTime(2026, 10, 31));
 }

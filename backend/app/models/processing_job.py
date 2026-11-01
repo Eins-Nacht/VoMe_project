@@ -17,6 +17,15 @@ class ProcessingStatus(str, Enum):
     PROCESSING = "processing"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class TranscriptionStatus(str, Enum):
+    SUCCESS = "success"
+    INVALID_AUDIO = "invalid_audio"
+    NO_SPEECH = "no_speech"
+    UNCLEAR_SPEECH = "unclear_speech"
+    FAILED = "failed"
 
 
 class ProcessingJob(UpdatedTimestampMixin, Base):
@@ -26,7 +35,7 @@ class ProcessingJob(UpdatedTimestampMixin, Base):
     __table_args__ = (
         Index("ix_processing_jobs_status_updated_at", "status", "updated_at"),
         CheckConstraint(
-            "status IN ('pending', 'processing', 'completed', 'failed')",
+            "status IN ('pending', 'processing', 'completed', 'failed', 'cancelled')",
             name="ck_processing_jobs_status",
         ),
     )
@@ -48,6 +57,15 @@ class ProcessingJob(UpdatedTimestampMixin, Base):
         ),
         default=ProcessingStatus.PENDING,
         nullable=False,
+    )
+    transcription_status: Mapped[TranscriptionStatus | None] = mapped_column(
+        SqlEnum(
+            TranscriptionStatus,
+            values_callable=lambda enum: [item.value for item in enum],
+            name="transcription_status",
+            native_enum=False,
+            create_constraint=False,
+        )
     )
     error_message: Mapped[str | None] = mapped_column(Text)
 

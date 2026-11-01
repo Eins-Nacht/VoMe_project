@@ -19,6 +19,7 @@ class HistoryScreen extends StatefulWidget {
   final List<Recording> processingRecordings;
   final void Function(Recording recording)? onProcessingTap;
   final Future<void> Function(Recording recording)? onRetryProcessing;
+  final Future<void> Function(Recording recording)? onDeleteProcessing;
 
   const HistoryScreen({
     super.key,
@@ -32,6 +33,7 @@ class HistoryScreen extends StatefulWidget {
     this.processingRecordings = const [],
     this.onProcessingTap,
     this.onRetryProcessing,
+    this.onDeleteProcessing,
   });
 
   @override
@@ -244,6 +246,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                             onRetry: widget.onRetryProcessing == null
                                 ? null
                                 : () => widget.onRetryProcessing!(recording),
+                            onDelete: widget.onDeleteProcessing == null
+                                ? null
+                                : () => widget.onDeleteProcessing!(recording),
                           ),
                         ),
                   ],

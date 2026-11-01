@@ -103,6 +103,24 @@ class ProcessingService {
 
   Future<ProcessingResult> retry(Recording recording) => enqueue(recording);
 
+  Future<void> cancelAndDelete(Recording recording) async {
+    final api = _api;
+    final jobId = recording.processingJobId;
+    if (api != null &&
+        jobId != null &&
+        (recording.status == 'Pending' || recording.status == 'Processing')) {
+      await api.cancelProcessing(int.parse(jobId));
+      if (recording.status == 'Pending' || recording.status == 'Processing') {
+        _trackedRecordings.remove(recording.id);
+      }
+    }
+    if (api != null && jobId != null) {
+      final job = await api.processingStatus(int.parse(jobId));
+      await api.delete(job.audioRecordId);
+    }
+    await RecordingRepository.instance.deleteRecording(recording.id);
+  }
+
   Future<void> resumePendingJobs() async {
     final recordings = await RecordingRepository.instance.getAllRecordings();
     for (final recording in recordings) {
@@ -131,8 +149,21 @@ class ProcessingService {
         );
         if (recording == null) return;
         await _saveJob(recordingId, job);
+        if (job.status == 'cancelled') return;
         if (job.status == 'completed') {
           final summary = await api.processingResult(jobId);
+          if (summary.transcriptionStatus != null &&
+              summary.transcriptionStatus != 'success') {
+            await RecordingRepository.instance.updateProcessing(
+              recordingId,
+              status: 'Failed',
+              error: _outcomeError(
+                summary.transcriptionStatus!,
+                summary.message,
+              ),
+            );
+            return;
+          }
           await RecordingRepository.instance.updateProcessing(
             recordingId,
             status: 'Completed',
@@ -200,6 +231,19 @@ class ProcessingService {
     'processing' => 'Processing',
     'completed' => 'Completed',
     'failed' => 'Failed',
+    'cancelled' => 'Cancelled',
     _ => 'Pending',
+  };
+
+  String _outcomeError(String status, String? message) =>
+      '$status|${message ?? _defaultOutcomeMessage(status)}';
+
+  String _defaultOutcomeMessage(String status) => switch (status) {
+    'no_speech' => 'No speech was found in this audio file.',
+    'invalid_audio' =>
+      'This audio file is empty or cannot be opened. Please select another file.',
+    'unclear_speech' =>
+      'Speech was detected, but it could not be transcribed clearly.',
+    _ => 'Something went wrong while processing your audio.',
   };
 }

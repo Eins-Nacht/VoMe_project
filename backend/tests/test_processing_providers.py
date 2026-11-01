@@ -25,11 +25,25 @@ def test_mock_provider_selection_is_explicit():
 def test_openai_provider_requires_api_key():
     with pytest.raises(
         RuntimeError,
-        match="OPENAI_API_KEY is required when PROCESSING_PROVIDER=whisper_openai",
+        match="OPENAI_API_KEY is required",
     ):
         get_configured_providers(
             Settings(processing_provider="whisper_openai", openai_api_key=None)
         )
+
+
+def test_faster_whisper_can_run_with_mock_llm_without_api_key():
+    processing_providers._provider_cache.clear()
+    stt, llm = get_configured_providers(
+        Settings(
+            stt_provider="faster_whisper",
+            llm_provider="mock",
+            openai_api_key=None,
+        )
+    )
+
+    assert isinstance(stt, WhisperSttProvider)
+    assert isinstance(llm, MockLlmProvider)
 
 
 def test_whisper_and_openai_providers_are_reused(monkeypatch):
@@ -45,6 +59,46 @@ def test_whisper_and_openai_providers_are_reused(monkeypatch):
     assert first_stt is second_stt
     assert first_llm is second_llm
     assert isinstance(first_stt, WhisperSttProvider)
+
+
+def test_whisper_configuration_is_forwarded_and_language_is_optional():
+    provider = WhisperSttProvider(
+        "test",
+        device="cpu",
+        compute_type="int8",
+        language="th",
+        model_dir="/models",
+    )
+    calls = []
+
+    class FakeModel:
+        def transcribe(self, audio_path, **kwargs):
+            calls.append(kwargs)
+            return iter([SimpleNamespace(text="สวัสดี")]), SimpleNamespace(language="th")
+
+    provider._get_model = lambda: FakeModel()
+
+    result = provider.transcribe(Path("audio.wav"), "audio.wav")
+
+    assert result.text == "สวัสดี"
+    assert calls == [{"vad_filter": True, "language": "th"}]
+
+
+def test_whisper_uses_automatic_language_detection_when_unset():
+    provider = WhisperSttProvider("test", language=None)
+    calls = []
+
+    class FakeModel:
+        def transcribe(self, audio_path, **kwargs):
+            calls.append(kwargs)
+            return iter([SimpleNamespace(text="hello")]), SimpleNamespace(language="en")
+
+    provider._get_model = lambda: FakeModel()
+
+    result = provider.transcribe(Path("audio.wav"), "audio.wav")
+
+    assert result.language == "en"
+    assert calls == [{"vad_filter": True}]
 
 
 def test_whisper_consumes_segments_while_transcription_lock_is_held():
@@ -116,7 +170,7 @@ def test_whisper_calls_are_serialized_for_one_provider():
 def test_whisper_model_cache_reuses_model_instance():
     provider = WhisperSttProvider("test", "int8")
     fake_model = object()
-    key = (provider.model_name, provider.compute_type)
+    key = (provider.model_name, provider.device, provider.compute_type, None)
     original_cache = WhisperSttProvider._model_cache
     WhisperSttProvider._model_cache = {key: fake_model}
     try:
@@ -134,7 +188,10 @@ def test_whisper_errors_are_sanitized_and_empty_transcripts_are_rejected():
             raise RuntimeError("secret provider internals")
 
     provider._get_model = lambda: FailingModel()
-    with pytest.raises(RuntimeError, match="^Whisper transcription failed$"):
+    with pytest.raises(
+        RuntimeError,
+        match="^Whisper model initialization or transcription failed$",
+    ):
         provider.transcribe(Path("audio.wav"), "audio.wav")
 
     class EmptyModel:
@@ -142,5 +199,43 @@ def test_whisper_errors_are_sanitized_and_empty_transcripts_are_rejected():
             return iter(()), SimpleNamespace(language="en")
 
     provider._get_model = lambda: EmptyModel()
-    with pytest.raises(RuntimeError, match="^No speech was detected in this audio$"):
-        provider.transcribe(Path("audio.wav"), "audio.wav")
+    result = provider.transcribe(Path("audio.wav"), "audio.wav")
+    assert result.status.value == "no_speech"
+    assert result.text is None
+
+
+def test_whisper_rejects_empty_and_invalid_audio(tmp_path):
+    provider = WhisperSttProvider("test", "int8")
+
+    empty = tmp_path / "empty.wav"
+    empty.write_bytes(b"")
+    result = provider.transcribe(empty, empty.name)
+    assert result.status.value == "invalid_audio"
+    assert result.message == "The audio file is empty or invalid"
+
+    invalid = tmp_path / "invalid.wav"
+    invalid.write_bytes(b"not audio")
+    result = provider.transcribe(invalid, invalid.name)
+    assert result.status.value == "invalid_audio"
+
+
+def test_whisper_classifies_all_low_quality_segments_as_unclear():
+    provider = WhisperSttProvider("test", "int8")
+    audio = Path("audio.wav")
+
+    class FakeModel:
+        def transcribe(self, audio_path, vad_filter):
+            return iter(
+                [
+                    SimpleNamespace(
+                        text="garbled",
+                        no_speech_prob=0.9,
+                        avg_logprob=-2.0,
+                        compression_ratio=3.0,
+                    )
+                ]
+            ), SimpleNamespace(language="en")
+
+    provider._get_model = lambda: FakeModel()
+    result = provider.transcribe(audio, audio.name)
+    assert result.status.value == "unclear_speech"

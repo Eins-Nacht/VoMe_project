@@ -9,7 +9,7 @@ echo =====================================
 echo.
 echo [1/2] Starting Backend...
 
-start "VoMe Backend" /D "%~dp0backend" cmd /k "python -m uvicorn app.main:app --reload"
+start "VoMe Backend" /D "%~dp0backend" cmd /k "python -m alembic upgrade head && python -m uvicorn app.main:app --reload"
 
 timeout /t 2 /nobreak >nul
 

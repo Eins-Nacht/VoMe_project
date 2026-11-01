@@ -68,12 +68,14 @@ class RemoteProcessingJob {
   final int audioRecordId;
   final String status;
   final String? errorMessage;
+  final String? transcriptionStatus;
 
   const RemoteProcessingJob({
     required this.id,
     required this.audioRecordId,
     required this.status,
     this.errorMessage,
+    this.transcriptionStatus,
   });
 
   factory RemoteProcessingJob.fromJson(Map<String, dynamic> json) =>
@@ -82,6 +84,7 @@ class RemoteProcessingJob {
         audioRecordId: json['audio_record_id'] as int,
         status: json['status'] as String,
         errorMessage: json['error_message'] as String?,
+        transcriptionStatus: json['transcription_status'] as String?,
       );
 }
 
@@ -99,6 +102,8 @@ class RemoteSummary {
   final String? category;
   final String? mood;
   final String? actionStatus;
+  final String? transcriptionStatus;
+  final String? message;
 
   const RemoteSummary({
     required this.id,
@@ -114,6 +119,8 @@ class RemoteSummary {
     this.category,
     this.mood,
     this.actionStatus,
+    this.transcriptionStatus,
+    this.message,
   });
 
   factory RemoteSummary.fromJson(Map<String, dynamic> json) => RemoteSummary(
@@ -130,6 +137,8 @@ class RemoteSummary {
     category: json['category'] as String?,
     mood: json['mood'] as String?,
     actionStatus: json['action_status'] as String?,
+    transcriptionStatus: json['transcription_status'] as String?,
+    message: json['message'] as String?,
   );
 
   factory RemoteSummary.fromProcessingResult(Map<String, dynamic> json) {
@@ -149,6 +158,8 @@ class RemoteSummary {
           json['event_category'] as String? ?? json['category'] as String?,
       mood: json['mood'] as String?,
       actionStatus: json['action_status'] as String?,
+      transcriptionStatus: json['transcription_status'] as String?,
+      message: json['message'] as String?,
     );
   }
 
@@ -166,6 +177,8 @@ class RemoteSummary {
     'category': category,
     'mood': mood,
     'action_status': actionStatus,
+    'transcription_status': transcriptionStatus,
+    'message': message,
   };
 }
 
@@ -256,6 +269,15 @@ class AudioApiService {
 
   Future<RemoteProcessingJob> processingStatus(int jobId) async {
     final response = await _get('/processing/$jobId');
+    _checkResponse(response);
+    return RemoteProcessingJob.fromJson(_decodeJson(response));
+  }
+
+  Future<RemoteProcessingJob> cancelProcessing(int jobId) async {
+    final response = await _client.delete(
+      _uri('/processing/$jobId'),
+      headers: _headers,
+    );
     _checkResponse(response);
     return RemoteProcessingJob.fromJson(_decodeJson(response));
   }

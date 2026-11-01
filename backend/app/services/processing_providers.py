@@ -4,13 +4,15 @@ from pathlib import Path
 from threading import Lock
 from typing import Protocol
 
-from app.models import ActionStatus, Mood
+from app.models import ActionStatus, Mood, TranscriptionStatus
 
 
 @dataclass(frozen=True)
 class TranscriptResult:
-    text: str
+    text: str | None
     language: str | None
+    status: TranscriptionStatus = TranscriptionStatus.SUCCESS
+    message: str | None = None
 
 
 @dataclass(frozen=True)
@@ -56,16 +58,31 @@ class MockLlmProvider:
 
 
 class WhisperSttProvider:
-    _model_cache: dict[tuple[str, str], object] = {}
+    _model_cache: dict[tuple[str, str, str, str | None], object] = {}
     _model_cache_lock = Lock()
 
-    def __init__(self, model_name: str, compute_type: str) -> None:
+    def __init__(
+        self,
+        model_name: str,
+        compute_type: str = "int8",
+        device: str = "cpu",
+        language: str | None = None,
+        model_dir: str | None = None,
+    ) -> None:
         self.model_name = model_name
+        self.device = device
         self.compute_type = compute_type
+        self.language = language
+        self.model_dir = model_dir
         self._transcribe_lock = Lock()
 
     def _get_model(self):
-        key = (self.model_name, self.compute_type)
+        key = (
+            self.model_name,
+            self.device,
+            self.compute_type,
+            self.model_dir or None,
+        )
         model = self._model_cache.get(key)
         if model is not None:
             return model
@@ -76,26 +93,88 @@ class WhisperSttProvider:
 
                 model = WhisperModel(
                     self.model_name,
-                    device="cpu",
+                    device=self.device,
                     compute_type=self.compute_type,
+                    **({"download_root": self.model_dir} if self.model_dir else {}),
                 )
                 self._model_cache[key] = model
         return model
 
+    def _validate_audio(self, audio_path: Path) -> str | None:
+        if not audio_path.exists():
+            return None
+        if audio_path.stat().st_size == 0:
+            return "The audio file is empty or invalid"
+        try:
+            import av
+
+            with av.open(str(audio_path)) as container:
+                audio_streams = [
+                    stream for stream in container.streams if stream.type == "audio"
+                ]
+                if not audio_streams:
+                    return "The audio file is empty or invalid"
+                durations = [
+                    stream.duration * float(stream.time_base)
+                    for stream in audio_streams
+                    if stream.duration is not None and stream.time_base is not None
+                ]
+                if durations and max(durations) <= 0:
+                    return "The audio file is empty or invalid"
+        except Exception:
+            return "The audio file is empty or invalid"
+        return None
+
     def transcribe(self, audio_path: Path, filename: str) -> TranscriptResult:
         with self._transcribe_lock:
+            try:
+                validation_error = self._validate_audio(audio_path)
+            except OSError:
+                validation_error = "The audio file is empty or invalid"
+            if validation_error:
+                return TranscriptResult(
+                    text=None,
+                    language=None,
+                    status=TranscriptionStatus.INVALID_AUDIO,
+                    message=validation_error,
+                )
             try:
                 segments, info = self._get_model().transcribe(
                     str(audio_path),
                     vad_filter=True,
+                    **({"language": self.language} if self.language else {}),
                 )
-                text = " ".join(
-                    segment.text.strip() for segment in segments
-                ).strip()
+                collected_segments = list(segments)
             except Exception:
-                raise RuntimeError("Whisper transcription failed") from None
+                raise RuntimeError(
+                    "Whisper model initialization or transcription failed"
+                ) from None
+            text = " ".join(
+                segment.text.strip() for segment in collected_segments
+            ).strip()
             if not text:
-                raise RuntimeError("No speech was detected in this audio")
+                return TranscriptResult(
+                    text=None,
+                    language=getattr(info, "language", None),
+                    status=TranscriptionStatus.NO_SPEECH,
+                    message="No speech detected in audio",
+                )
+            # Require all three indicators before rejecting speech as unclear;
+            # this preserves short utterances and tolerates isolated noise.
+            low_quality = [
+                segment
+                for segment in collected_segments
+                if getattr(segment, "no_speech_prob", 0) >= 0.85
+                and getattr(segment, "avg_logprob", 0) <= -1.5
+                and getattr(segment, "compression_ratio", 0) >= 2.4
+            ]
+            if len(low_quality) == len(collected_segments):
+                return TranscriptResult(
+                    text=None,
+                    language=getattr(info, "language", None),
+                    status=TranscriptionStatus.UNCLEAR_SPEECH,
+                    message="Speech was detected but could not be transcribed reliably",
+                )
             return TranscriptResult(
                 text=text,
                 language=getattr(info, "language", None),
@@ -173,23 +252,28 @@ class OpenAILlmProvider:
         )
 
 
-_provider_cache: dict[tuple[str, str, str], tuple[WhisperSttProvider, OpenAILlmProvider]] = {}
+_provider_cache: dict[tuple[object, ...], tuple[SttProvider, LlmProvider]] = {}
 _provider_cache_lock = Lock()
 
 
 def get_configured_providers(settings) -> tuple[SttProvider, LlmProvider]:
-    if settings.processing_provider == "mock":
-        return MockSttProvider(), MockLlmProvider()
-    if settings.processing_provider != "whisper_openai":
-        raise RuntimeError("Unsupported processing provider configuration")
-    if not settings.openai_api_key:
+    stt_name = settings.effective_stt_provider
+    llm_name = settings.effective_llm_provider
+    if llm_name == "openai" and not settings.openai_api_key:
         raise RuntimeError(
-            "OPENAI_API_KEY is required when PROCESSING_PROVIDER=whisper_openai"
+            "OPENAI_API_KEY is required when LLM_PROVIDER=openai "
+            "or PROCESSING_PROVIDER=whisper_openai"
         )
 
     key = (
-        settings.faster_whisper_model,
-        settings.faster_whisper_compute_type,
+        stt_name,
+        llm_name,
+        settings.effective_whisper_model,
+        settings.whisper_device,
+        settings.effective_whisper_compute_type,
+        settings.whisper_language or None,
+        settings.whisper_model_dir or None,
+        settings.openai_api_key,
         settings.openai_summary_model,
     )
     providers = _provider_cache.get(key)
@@ -197,15 +281,28 @@ def get_configured_providers(settings) -> tuple[SttProvider, LlmProvider]:
         with _provider_cache_lock:
             providers = _provider_cache.get(key)
             if providers is None:
-                providers = (
+                stt_provider: SttProvider = (
                     WhisperSttProvider(
-                        settings.faster_whisper_model,
-                        settings.faster_whisper_compute_type,
-                    ),
+                        model_name=settings.effective_whisper_model,
+                        device=settings.whisper_device,
+                        compute_type=settings.effective_whisper_compute_type,
+                        language=settings.whisper_language or None,
+                        model_dir=settings.whisper_model_dir or None,
+                    )
+                    if stt_name == "faster_whisper"
+                    else MockSttProvider()
+                )
+                llm_provider: LlmProvider = (
                     OpenAILlmProvider(
                         settings.openai_api_key,
                         settings.openai_summary_model,
-                    ),
+                    )
+                    if llm_name == "openai"
+                    else MockLlmProvider()
+                )
+                providers = (
+                    stt_provider,
+                    llm_provider,
                 )
                 _provider_cache[key] = providers
     return providers

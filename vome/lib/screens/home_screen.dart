@@ -18,6 +18,7 @@ class HomeScreen extends StatelessWidget {
   final void Function(RemoteSummary summary)? onSummaryTap;
   final void Function(Recording recording)? onProcessingTap;
   final Future<void> Function(Recording recording)? onRetryProcessing;
+  final Future<void> Function(Recording recording)? onDeleteProcessing;
   final int currentIndex;
   final void Function(int index)? onNavigationTap;
 
@@ -34,6 +35,7 @@ class HomeScreen extends StatelessWidget {
     this.onSummaryTap,
     this.onProcessingTap,
     this.onRetryProcessing,
+    this.onDeleteProcessing,
     this.currentIndex = 0,
     this.onNavigationTap,
   });
@@ -128,6 +130,9 @@ class HomeScreen extends StatelessWidget {
                                   onRetry: onRetryProcessing == null
                                       ? null
                                       : () => onRetryProcessing!(recording),
+                                  onDelete: onDeleteProcessing == null
+                                      ? null
+                                      : () => onDeleteProcessing!(recording),
                                 ),
                               ),
                             if (summaryLoadError != null)

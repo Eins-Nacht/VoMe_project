@@ -2,6 +2,8 @@ services:
   api:
     build: .
     env_file: .env
+    environment:
+      WHISPER_MODEL_DIR: /models
     ports:
       - "8000:8000"
     volumes:

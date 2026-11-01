@@ -17,6 +17,13 @@ class Recording {
   final String? processingError;
   final bool audioRetained;
 
+  String? get processingMessage {
+    final value = processingError;
+    if (value == null) return null;
+    final separator = value.indexOf('|');
+    return separator > 0 ? value.substring(separator + 1) : value;
+  }
+
   const Recording({
     required this.id,
     required this.title,
