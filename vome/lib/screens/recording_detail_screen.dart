@@ -48,9 +48,7 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
     if (!mounted) return;
     setState(() {
       _localRecording = recording;
-      _audioRetained =
-          recording?.audioRetained == true &&
-          recording != null;
+      _audioRetained = recording?.audioRetained == true && recording != null;
     });
   }
 
@@ -72,8 +70,7 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
       }
       await _player.play(
         DeviceFileSource(
-          RecordingRepository.instance
-              .toAbsoluteAudioPath(recording.audioPath),
+          RecordingRepository.instance.toAbsoluteAudioPath(recording.audioPath),
         ),
       );
     } catch (error) {
@@ -82,7 +79,6 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
           context,
         ).showSnackBar(SnackBar(content: Text('$error')));
     }
-
   }
 
   Future<void> _deleteLocalAudio() async {
@@ -94,6 +90,26 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
         setState(() => _audioRetained = false);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Original audio deleted from device.')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$error')));
+      }
+    }
+  }
+
+  Future<void> _keepLocalAudio() async {
+    final recording = _localRecording;
+    if (recording == null || _audioRetained) return;
+    try {
+      await RecordingRepository.instance.retainLocalAudio(recording);
+      if (mounted) {
+        setState(() => _audioRetained = true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Original audio kept on this device.')),
         );
       }
     } catch (error) {
@@ -234,7 +250,15 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
               child: const Text('Delete original audio from device'),
             ),
           ),
-        _section('Summary', _summary.summary),
+        if (!_audioRetained && _localRecording != null)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              onPressed: _keepLocalAudio,
+              child: const Text('Keep original audio on device'),
+            ),
+          ),
+        _section('AI Summary', _summary.summary),
         if (_summary.transcriptText != null)
           _section('Transcript', _summary.transcriptText!),
         if (_summary.transcriptLanguage != null)

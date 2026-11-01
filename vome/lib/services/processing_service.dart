@@ -20,6 +20,8 @@ class ProcessingService {
 
   static final instance = ProcessingService._();
   final Set<String> _trackedRecordings = <String>{};
+  final Map<String, Future<RemoteSummary>> _summaryRequests =
+      <String, Future<RemoteSummary>>{};
   static const _maxUploadBytes = 25 * 1024 * 1024;
 
   AudioApiService? get _api {
@@ -87,7 +89,6 @@ class ProcessingService {
       }
 
       await _saveJob(recording.id, job);
-      unawaited(_poll(recording.id, job.id));
       return const ProcessingResult.success();
     } on FormatException {
       const error = 'The saved processing job is invalid.';
@@ -127,7 +128,7 @@ class ProcessingService {
     for (final recording in recordings) {
       if (recording.status == 'Pending' ||
           (recording.processingJobId != null && recording.status != 'Failed')) {
-        unawaited(enqueue(recording));
+        unawaited(processToSummary(recording));
       }
     }
   }
@@ -156,18 +157,80 @@ class ProcessingService {
     return summary;
   }
 
-  Future<void> _poll(String recordingId, int jobId) async {
+  Future<RemoteSummary> processToSummary(
+    Recording recording, {
+    void Function(String stage)? onStage,
+  }) {
+    final existing = _summaryRequests[recording.id];
+    if (existing != null) return existing;
+    final request = _processToSummary(recording, onStage: onStage);
+    _summaryRequests[recording.id] = request;
+    request.whenComplete(() => _summaryRequests.remove(recording.id)).ignore();
+    return request;
+  }
+
+  Future<RemoteSummary> _processToSummary(
+    Recording recording, {
+    void Function(String stage)? onStage,
+  }) async {
+    onStage?.call('Uploading audio...');
+    final enqueued = await enqueue(recording);
+    if (!enqueued.succeeded) {
+      throw StateError(enqueued.error ?? 'Unable to start processing.');
+    }
+
+    final current = await RecordingRepository.instance.getRecordingById(
+      recording.id,
+    );
+    final jobId = current?.processingJobId ?? recording.processingJobId;
+    if (jobId == null) {
+      throw StateError('The processing job was not created.');
+    }
+    final summary = await _pollUntilTranscribed(
+      recording.id,
+      int.parse(jobId),
+      onStage: onStage,
+    );
+    onStage?.call('Generating summary...');
+    try {
+      return await generateSummary(
+        await RecordingRepository.instance.getRecordingById(recording.id) ??
+            recording,
+      );
+    } catch (error) {
+      await RecordingRepository.instance.updateProcessing(
+        recording.id,
+        status: 'AwaitingSummary',
+        transcript: summary.transcriptText,
+        error: error.toString(),
+      );
+      rethrow;
+    }
+  }
+
+  Future<RemoteSummary> _pollUntilTranscribed(
+    String recordingId,
+    int jobId, {
+    void Function(String stage)? onStage,
+  }) async {
     try {
       final api = _api;
-      if (api == null) return;
+      if (api == null) {
+        throw StateError('Sign in to start processing.');
+      }
+      onStage?.call('Transcribing audio...');
       for (var attempt = 0; attempt < 120; attempt++) {
         final job = await api.processingStatus(jobId);
         final recording = await RecordingRepository.instance.getRecordingById(
           recordingId,
         );
-        if (recording == null) return;
+        if (recording == null) {
+          throw StateError('The local recording is unavailable.');
+        }
         await _saveJob(recordingId, job);
-        if (job.status == 'cancelled') return;
+        if (job.status == 'cancelled') {
+          throw StateError('Processing was cancelled.');
+        }
         if (job.status == 'completed') {
           final summary = await api.processingResult(jobId);
           if (summary.transcriptionStatus != null &&
@@ -180,7 +243,9 @@ class ProcessingService {
                 summary.message,
               ),
             );
-            return;
+            throw StateError(
+              _outcomeError(summary.transcriptionStatus!, summary.message),
+            );
           }
           await RecordingRepository.instance.updateProcessing(
             recordingId,
@@ -188,9 +253,11 @@ class ProcessingService {
             transcript: summary.transcriptText,
             error: null,
           );
-          return;
+          return summary;
         }
-        if (job.status == 'failed') return;
+        if (job.status == 'failed') {
+          throw StateError(job.errorMessage ?? 'Transcription failed.');
+        }
         await Future<void>.delayed(const Duration(seconds: 2));
       }
       await RecordingRepository.instance.updateProcessing(
@@ -198,6 +265,7 @@ class ProcessingService {
         status: 'Failed',
         error: 'Processing timed out. Try again.',
       );
+      throw StateError('Transcription timed out. Try again.');
     } on AudioApiException catch (error) {
       final recording = await RecordingRepository.instance.getRecordingById(
         recordingId,
@@ -205,13 +273,25 @@ class ProcessingService {
       if (recording != null) {
         await _markUnavailable(recording, error.toString());
       }
+      rethrow;
     } catch (error) {
       final recording = await RecordingRepository.instance.getRecordingById(
         recordingId,
       );
       if (recording != null) {
-        await _markUnavailable(recording, error.toString());
+        if (error is StateError) {
+          await RecordingRepository.instance.updateProcessing(
+            recordingId,
+            status: recording.status == 'AwaitingSummary'
+                ? 'AwaitingSummary'
+                : 'Failed',
+            error: error.toString(),
+          );
+        } else {
+          await _markUnavailable(recording, error.toString());
+        }
       }
+      rethrow;
     } finally {
       _trackedRecordings.remove(recordingId);
     }

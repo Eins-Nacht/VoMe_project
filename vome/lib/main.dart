@@ -285,12 +285,18 @@ class _AppRootState extends State<AppRoot> with WidgetsBindingObserver {
 
   void _onRecordingComplete(Recording recording) {
     _refreshData();
-    setState(() => _screen = _AppScreen.home);
+    setState(() {
+      _selectedRecording = recording;
+      _screen = _AppScreen.processing;
+    });
   }
 
   void _onUploadComplete(Recording recording) {
     _refreshData();
-    setState(() => _navIndex = 0);
+    setState(() {
+      _selectedRecording = recording;
+      _screen = _AppScreen.processing;
+    });
   }
 
   @override
@@ -304,7 +310,12 @@ class _AppRootState extends State<AppRoot> with WidgetsBindingObserver {
           onRecordingComplete: _onRecordingComplete,
         ),
         _AppScreen.processing => ProcessingStatusScreen(
+          recording: _selectedRecording,
           recordings: _processingRecordings,
+          onSummaryReady: (summary) async {
+            _openRecordingDetail(summary);
+            _refreshData();
+          },
           onRefresh: () async {
             _refreshData();
           },

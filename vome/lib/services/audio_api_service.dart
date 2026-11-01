@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import 'auth_service.dart';
@@ -206,7 +207,9 @@ class AudioApiService {
     required this.accessToken,
     http.Client? client,
   }) : baseUri = Uri.parse(baseUrl),
-       _client = client ?? http.Client();
+       _client = client ?? http.Client() {
+    debugPrint('[VoMe API DEBUG] configured base URL: $baseUrl');
+  }
 
   Map<String, String> get _headers => {'Authorization': 'Bearer $accessToken'};
   Uri _uri(String path) => baseUri.resolve('/api/v1$path');
@@ -219,7 +222,12 @@ class AudioApiService {
     required String filePath,
     String? clientRecordingId,
   }) async {
-    final request = http.MultipartRequest('POST', _uri('/audio'))
+    final uri = _uri('/audio');
+    debugPrint(
+      '[VoMe API DEBUG] request POST $uri '
+      'fields={event_id: $eventId, client_recording_id: $clientRecordingId}',
+    );
+    final request = http.MultipartRequest('POST', uri)
       ..headers.addAll(_headers)
       ..fields['event_id'] = eventId.toString()
       ..fields.addAll({
@@ -259,8 +267,13 @@ class AudioApiService {
     required String title,
     required String category,
   }) async {
+    final uri = _uri('/events');
+    debugPrint(
+      '[VoMe API DEBUG] request POST $uri '
+      'body=${jsonEncode({'title': title, 'category': category})}',
+    );
     final response = await _client.post(
-      _uri('/events'),
+      uri,
       headers: {..._headers, 'Content-Type': 'application/json'},
       body: jsonEncode({'title': title, 'category': category}),
     );
@@ -269,15 +282,16 @@ class AudioApiService {
   }
 
   Future<RemoteProcessingJob> startProcessing(int audioId) async {
-    final response = await _client.post(
-      _uri('/processing/audio/$audioId'),
-      headers: _headers,
-    );
+    final uri = _uri('/processing/audio/$audioId');
+    debugPrint('[VoMe API DEBUG] request POST $uri body=<empty>');
+    final response = await _client.post(uri, headers: _headers);
     _checkResponse(response);
     return RemoteProcessingJob.fromJson(_decodeJson(response));
   }
 
   Future<RemoteProcessingJob> processingStatus(int jobId) async {
+    final uri = _uri('/processing/$jobId');
+    debugPrint('[VoMe API DEBUG] request GET $uri');
     final response = await _get('/processing/$jobId');
     _checkResponse(response);
     return RemoteProcessingJob.fromJson(_decodeJson(response));
@@ -293,16 +307,17 @@ class AudioApiService {
   }
 
   Future<RemoteSummary> processingResult(int jobId) async {
+    final uri = _uri('/processing/$jobId/result');
+    debugPrint('[VoMe API DEBUG] request GET $uri');
     final response = await _get('/processing/$jobId/result');
     _checkResponse(response);
     return RemoteSummary.fromProcessingResult(_decodeJson(response));
   }
 
   Future<RemoteSummary> generateSummary(int jobId) async {
-    final response = await _client.post(
-      _uri('/processing/$jobId/summary'),
-      headers: _headers,
-    );
+    final uri = _uri('/processing/$jobId/summary');
+    debugPrint('[VoMe API DEBUG] request POST $uri body=<empty>');
+    final response = await _client.post(uri, headers: _headers);
     _checkResponse(response);
     return RemoteSummary.fromProcessingResult(_decodeJson(response));
   }
@@ -377,6 +392,11 @@ class AudioApiService {
   }
 
   void _checkResponse(http.Response response) {
+    debugPrint(
+      '[VoMe API DEBUG] response ${response.request?.method ?? '<unknown>'} '
+      '${response.request?.url ?? '<unknown URL>'} '
+      'status=${response.statusCode} body=${response.body}',
+    );
     if (response.statusCode == 401) {
       AuthService.instance.logout();
     }
