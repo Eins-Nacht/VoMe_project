@@ -55,13 +55,13 @@ class _ProcessingStatusScreenState extends State<ProcessingStatusScreen> {
       _retrying = false;
     });
     try {
-      final summary = await ProcessingService.instance.processToSummary(
+      final result = await ProcessingService.instance.processRecording(
         recording,
         onStage: (stage) {
           if (mounted) setState(() => _stage = stage);
         },
       );
-      if (mounted) await widget.onSummaryReady?.call(summary);
+      if (mounted) await widget.onSummaryReady?.call(result);
     } catch (error) {
       if (mounted) {
         setState(() {

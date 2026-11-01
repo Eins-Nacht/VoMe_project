@@ -73,29 +73,7 @@ class _TranscriptReviewScreenState extends State<TranscriptReviewScreen> {
       } else {
         await RecordingRepository.instance.removeLocalAudio(recording);
       }
-      await _generateSummary(recording);
-    } catch (error) {
-      if (mounted) {
-        setState(() {
-          _submitting = false;
-          _error = '$error';
-        });
-      }
-    }
-  }
-
-  Future<void> _generateSummary(Recording recording) async {
-    final summary = await ProcessingService.instance.generateSummary(recording);
-    await widget.onSummaryReady(summary);
-  }
-
-  Future<void> _retrySummary() async {
-    setState(() {
-      _submitting = true;
-      _error = null;
-    });
-    try {
-      await _generateSummary(widget.recording);
+      await widget.onSummaryReady(result);
     } catch (error) {
       if (mounted) {
         setState(() {
@@ -160,11 +138,6 @@ class _TranscriptReviewScreenState extends State<TranscriptReviewScreen> {
                         ),
                       ),
                     ],
-                  ),
-                if (_error != null && !_submitting)
-                  TextButton(
-                    onPressed: _retrySummary,
-                    child: const Text('Retry summary generation'),
                   ),
               ],
             ),

@@ -258,9 +258,17 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
               child: const Text('Keep original audio on device'),
             ),
           ),
-        _section('AI Summary', _summary.summary),
-        if (_summary.transcriptText != null)
-          _section('Transcript', _summary.transcriptText!),
+        if (_summary.summary.trim().isNotEmpty)
+          _section('AI Summary', _summary.summary)
+        else
+          _section(
+            'AI Summary',
+            'Summary generation is not enabled. The transcript below is ready for review.',
+          ),
+        if (_summary.transcriptText?.trim().isNotEmpty == true)
+          _section('Transcript', _summary.transcriptText!)
+        else
+          _emptySection('Transcript', 'No transcript is available.'),
         if (_summary.transcriptLanguage != null)
           Text(
             'Detected language: ${_summary.transcriptLanguage}',
@@ -289,6 +297,16 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
       Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
       const SizedBox(height: 6),
       Text(value),
+      const SizedBox(height: 18),
+    ],
+  );
+
+  Widget _emptySection(String title, String message) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+      const SizedBox(height: 6),
+      Text(message, style: const TextStyle(color: Colors.grey)),
       const SizedBox(height: 18),
     ],
   );

@@ -24,6 +24,9 @@ Copy `.env.example` to `.env`.
 - `LLM_PROVIDER=openai` enables OpenAI summaries and requires
   `OPENAI_API_KEY`. STT and LLM selection are independent when these variables
   are set.
+- The repository launcher sets `LLM_PROVIDER=openai`; put `OPENAI_API_KEY` in
+  `backend/.env` before starting it. Without a key, summary generation fails
+  explicitly rather than returning mock content.
 
 Whisper defaults to the `small` model on CPU with `int8` compute. Set
 `WHISPER_MODEL`, `WHISPER_DEVICE`, `WHISPER_COMPUTE_TYPE`, and optionally

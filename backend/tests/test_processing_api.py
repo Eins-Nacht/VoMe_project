@@ -7,6 +7,7 @@ from app.models import (
     Event,
     ProcessingJob,
     ProcessingStatus,
+    Summary,
     Transcript,
     User,
 )
@@ -52,6 +53,13 @@ def upload(client, headers, event_id):
     )
 
 
+def test_summary_generation_route_is_registered(client):
+    openapi = client.get("/openapi.json")
+
+    assert openapi.status_code == 200
+    assert openapi.json()["paths"]["/api/v1/processing/{job_id}/summary"]["post"]
+
+
 def test_processing_creates_transcript_without_summary(client, tmp_path):
     storage.root = tmp_path / "audio"
     headers = register_and_login(client, "processing@example.com")
@@ -85,6 +93,28 @@ def test_processing_creates_transcript_without_summary(client, tmp_path):
         saved_audio = db.get(AudioRecord, audio["id"])
         assert saved_audio.file_path is None
         assert not list(storage.root.glob("*"))
+    finally:
+        db.close()
+
+
+def test_processing_does_not_invoke_summary_provider(client, tmp_path):
+    storage.root = tmp_path / "audio"
+    headers = register_and_login(client, "transcription-only@example.com")
+    event_id = create_event(client, "transcription-only@example.com")
+    audio = upload(client, headers, event_id).json()
+
+    started = client.post(f"/api/v1/processing/audio/{audio['id']}", headers=headers)
+    result = client.get(
+        f"/api/v1/processing/{started.json()['id']}/result",
+        headers=headers,
+    )
+
+    assert result.status_code == 200
+    assert result.json()["transcript_text"] == "Mock transcript for sample.mp3"
+    assert result.json()["summary"] is None
+    db = client.app.state.testing_session()
+    try:
+        assert db.query(Summary).count() == 0
     finally:
         db.close()
 
@@ -301,7 +331,7 @@ def test_processing_failure_is_recorded_and_can_be_retried(client, tmp_path):
         db.expire_all()
         failed = db.get(ProcessingJob, job_id)
         assert failed.status is ProcessingStatus.FAILED
-        assert failed.error_message == "Audio processing failed"
+        assert failed.error_message == "mock STT failed"
 
         assert not (storage.root / "missing.mp3").exists()
         ProcessingService(

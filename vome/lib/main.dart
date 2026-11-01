@@ -226,14 +226,7 @@ class _AppRootState extends State<AppRoot> with WidgetsBindingObserver {
     try {
       final summary = await ProcessingService.instance.fetchResult(recording);
       if (summary != null && mounted) {
-        if (recording.status == 'AwaitingDecision') {
-          setState(() {
-            _selectedRecording = recording;
-            _screen = _AppScreen.review;
-          });
-        } else {
-          _openRecordingDetail(summary);
-        }
+        _openRecordingDetail(summary);
       }
     } catch (error) {
       if (mounted) {

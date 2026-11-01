@@ -12,11 +12,11 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     processing_provider: Literal["mock", "whisper_openai"] = "mock"
-    stt_provider: Literal["mock", "faster_whisper"] | None = None
+    stt_provider: Literal["mock", "faster_whisper"] = "faster_whisper"
     llm_provider: Literal["mock", "openai"] | None = None
     openai_api_key: str | None = None
     openai_summary_model: str = "gpt-4o-mini"
-    whisper_model: str = "small"
+    whisper_model: str = "Systran/faster-whisper-small"
     whisper_device: str = "cpu"
     whisper_compute_type: str = "int8"
     whisper_language: str | None = None
@@ -27,9 +27,7 @@ class Settings(BaseSettings):
 
     @property
     def effective_stt_provider(self) -> Literal["mock", "faster_whisper"]:
-        if self.stt_provider is not None:
-            return self.stt_provider
-        return "faster_whisper" if self.processing_provider == "whisper_openai" else "mock"
+        return self.stt_provider
 
     @property
     def effective_llm_provider(self) -> Literal["mock", "openai"]:

@@ -12,7 +12,10 @@ from app.schemas.processing import ProcessingJobResponse, ProcessingResultRespon
 from app.services.audio_storage_service import AudioStorageError
 from app.services.processing_service import ProcessingService
 from app.core.config import get_settings
-from app.services.processing_providers import get_configured_providers
+from app.services.processing_providers import (
+    get_configured_providers,
+    get_configured_stt_provider,
+)
 
 router = APIRouter(prefix="/processing", tags=["processing"])
 
@@ -36,12 +39,11 @@ def _run_job(job_id: int, session_factory, storage_service) -> None:
     settings = get_settings()
     service = ProcessingService(session_factory, storage_service=storage_service)
     try:
-        stt_provider, llm_provider = get_configured_providers(settings)
+        stt_provider = get_configured_stt_provider(settings)
     except RuntimeError as exc:
         service.mark_failed(job_id, str(exc))
         return
     service.stt_provider = stt_provider
-    service.llm_provider = llm_provider
     service.run_transcription(job_id)
 
 

@@ -25,7 +25,7 @@ class ProcessingStatusCard extends StatelessWidget {
     final status = switch (recording.status) {
       'Pending' => 'Waiting to process',
       'Processing' => 'Processing audio',
-      'AwaitingDecision' => 'Transcript ready - review required',
+      'AwaitingDecision' => 'Transcript ready',
       'Completed' => 'Summary ready',
       'Failed' => _statusText(outcome),
       _ => recording.status,

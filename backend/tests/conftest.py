@@ -9,7 +9,11 @@ from app.models.base import Base
 
 
 @pytest.fixture
-def client(tmp_path):
+def client(tmp_path, monkeypatch):
+    monkeypatch.setenv("STT_PROVIDER", "mock")
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
     engine = create_engine(
         f"sqlite:///{tmp_path / 'test.db'}",
         connect_args={"check_same_thread": False},
@@ -36,3 +40,4 @@ def client(tmp_path):
     app.dependency_overrides.clear()
     del app.state.testing_session
     engine.dispose()
+    get_settings.cache_clear()

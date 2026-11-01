@@ -41,6 +41,83 @@ void main() {
     expect(summary.summary, 'Summary');
   });
 
+  test('maps a real Thai transcript without requiring summary fields', () {
+    final result = RemoteSummary.fromProcessingResult({
+      'id': 8,
+      'audio_record_id': 4,
+      'status': 'completed',
+      'transcription_status': 'success',
+      'error_message': null,
+      'event_title': 'Thai meeting',
+      'event_category': 'Meeting',
+      'audio': {
+        'id': 4,
+        'event_id': 3,
+        'filename': 'meeting.mp3',
+        'format': 'mp3',
+        'size': 100,
+        'duration': 35.1,
+        'audio_path': null,
+        'created_at': '2026-10-31T00:00:00Z',
+        'updated_at': '2026-10-31T00:00:00Z',
+        'client_recording_id': 'local-4',
+      },
+      'transcript_text': 'สวัสดีครับ\nปิดประชุมครับ',
+      'transcript_language': 'th',
+      'summary': null,
+      'key_points': null,
+      'action_items': null,
+      'keywords': null,
+      'category': null,
+      'mood': null,
+      'action_status': null,
+      'message': null,
+    });
+
+    expect(result.transcriptText, 'สวัสดีครับ\nปิดประชุมครับ');
+    expect(result.transcriptLanguage, 'th');
+    expect(result.summary, isEmpty);
+    expect(result.keyPoints, isEmpty);
+  });
+
+  test('maps an empty transcript safely', () {
+    final result = RemoteSummary.fromProcessingResult({
+      'id': 9,
+      'audio_record_id': 5,
+      'status': 'completed',
+      'transcription_status': 'no_speech',
+      'error_message': 'No speech detected',
+      'event_title': 'Silent recording',
+      'event_category': null,
+      'audio': {
+        'id': 5,
+        'event_id': 3,
+        'filename': 'silent.mp3',
+        'format': 'mp3',
+        'size': 100,
+        'duration': null,
+        'audio_path': null,
+        'created_at': '2026-10-31T00:00:00Z',
+        'updated_at': '2026-10-31T00:00:00Z',
+      },
+      'transcript_text': null,
+      'transcript_language': null,
+      'summary': null,
+      'key_points': null,
+      'action_items': null,
+      'keywords': null,
+      'category': null,
+      'mood': null,
+      'action_status': null,
+      'message': 'No speech detected',
+    });
+
+    expect(result.transcriptText, isNull);
+    expect(result.transcriptLanguage, isNull);
+    expect(result.transcriptionStatus, 'no_speech');
+    expect(result.message, 'No speech detected');
+  });
+
   testWidgets('renders failed processing status and retry action', (
     tester,
   ) async {

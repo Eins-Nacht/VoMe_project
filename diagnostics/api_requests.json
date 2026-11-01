@@ -1,0 +1,2320 @@
+[
+  {
+    "timestamp": "2026-11-01T10:17:36.732904+00:00",
+    "label": "health",
+    "method": "GET",
+    "url": "http://127.0.0.1:8000/health",
+    "status": 200,
+    "elapsed_seconds": 0.011,
+    "request": {
+      "json": null,
+      "data": null,
+      "files": null
+    },
+    "response": {
+      "status": "ok"
+    }
+  },
+  {
+    "timestamp": "2026-11-01T10:17:36.741953+00:00",
+    "label": "openapi",
+    "method": "GET",
+    "url": "http://127.0.0.1:8000/openapi.json",
+    "status": 200,
+    "elapsed_seconds": 0.009,
+    "request": {
+      "json": null,
+      "data": null,
+      "files": null
+    },
+    "response": {
+      "openapi": "3.1.0",
+      "info": {
+        "title": "Audiary API",
+        "description": "Phase 1 authentication and user API for Audiary.",
+        "version": "1.0.0"
+      },
+      "paths": {
+        "/api/v1/auth/register": {
+          "post": {
+            "tags": [
+              "auth"
+            ],
+            "summary": "Register",
+            "operationId": "register_api_v1_auth_register_post",
+            "requestBody": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/RegisterRequest"
+                  }
+                }
+              },
+              "required": true
+            },
+            "responses": {
+              "201": {
+                "description": "Successful Response",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/UserResponse"
+                    }
+                  }
+                }
+              },
+              "422": {
+                "description": "Validation Error",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/HTTPValidationError"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "/api/v1/auth/login": {
+          "post": {
+            "tags": [
+              "auth"
+            ],
+            "summary": "Login",
+            "operationId": "login_api_v1_auth_login_post",
+            "requestBody": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/LoginRequest"
+                  }
+                }
+              },
+              "required": true
+            },
+            "responses": {
+              "200": {
+                "description": "Successful Response",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/TokenResponse"
+                    }
+                  }
+                }
+              },
+              "422": {
+                "description": "Validation Error",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/HTTPValidationError"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "/api/v1/auth/me": {
+          "get": {
+            "tags": [
+              "auth"
+            ],
+            "summary": "Me",
+            "operationId": "me_api_v1_auth_me_get",
+            "responses": {
+              "200": {
+                "description": "Successful Response",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/UserResponse"
+                    }
+                  }
+                }
+              }
+            },
+            "security": [
+              {
+                "HTTPBearer": []
+              }
+            ]
+          }
+        },
+        "/api/v1/audio": {
+          "get": {
+            "tags": [
+              "audio"
+            ],
+            "summary": "List Audio",
+            "operationId": "list_audio_api_v1_audio_get",
+            "responses": {
+              "200": {
+                "description": "Successful Response",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "items": {
+                        "$ref": "#/components/schemas/AudioRecordResponse"
+                      },
+                      "type": "array",
+                      "title": "Response List Audio Api V1 Audio Get"
+                    }
+                  }
+                }
+              }
+            },
+            "security": [
+              {
+                "HTTPBearer": []
+              }
+            ]
+          },
+          "post": {
+            "tags": [
+              "audio"
+            ],
+            "summary": "Upload Audio",
+            "operationId": "upload_audio_api_v1_audio_post",
+            "requestBody": {
+              "content": {
+                "multipart/form-data": {
+                  "schema": {
+                    "$ref": "#/components/schemas/Body_upload_audio_api_v1_audio_post"
+                  }
+                }
+              },
+              "required": true
+            },
+            "responses": {
+              "201": {
+                "description": "Successful Response",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/AudioRecordResponse"
+                    }
+                  }
+                }
+              },
+              "422": {
+                "description": "Validation Error",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/HTTPValidationError"
+                    }
+                  }
+                }
+              }
+            },
+            "security": [
+              {
+                "HTTPBearer": []
+              }
+            ]
+          }
+        },
+        "/api/v1/audio/{record_id}": {
+          "get": {
+            "tags": [
+              "audio"
+            ],
+            "summary": "Get Audio",
+            "operationId": "get_audio_api_v1_audio__record_id__get",
+            "security": [
+              {
+                "HTTPBearer": []
+              }
+            ],
+            "parameters": [
+              {
+                "name": "record_id",
+                "in": "path",
+                "required": true,
+                "schema": {
+                  "type": "integer",
+                  "title": "Record Id"
+                }
+              }
+            ],
+            "responses": {
+              "200": {
+                "description": "Successful Response",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/AudioRecordResponse"
+                    }
+                  }
+                }
+              },
+              "422": {
+                "description": "Validation Error",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/HTTPValidationError"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "delete": {
+            "tags": [
+              "audio"
+            ],
+            "summary": "Delete Audio",
+            "operationId": "delete_audio_api_v1_audio__record_id__delete",
+            "security": [
+              {
+                "HTTPBearer": []
+              }
+            ],
+            "parameters": [
+              {
+                "name": "record_id",
+                "in": "path",
+                "required": true,
+                "schema": {
+                  "type": "integer",
+                  "title": "Record Id"
+                }
+              }
+            ],
+            "responses": {
+              "204": {
+                "description": "Successful Response"
+              },
+              "422": {
+                "description": "Validation Error",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/HTTPValidationError"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "/api/v1/audio/{record_id}/file": {
+          "get": {
+            "tags": [
+              "audio"
+            ],
+            "summary": "Download Audio",
+            "operationId": "download_audio_api_v1_audio__record_id__file_get",
+            "security": [
+              {
+                "HTTPBearer": []
+              }
+            ],
+            "parameters": [
+              {
+                "name": "record_id",
+                "in": "path",
+                "required": true,
+                "schema": {
+                  "type": "integer",
+                  "title": "Record Id"
+                }
+              }
+            ],
+            "responses": {
+              "200": {
+                "description": "Successful Response",
+                "content": {
+                  "application/json": {
+                    "schema": {}
+                  }
+                }
+              },
+              "422": {
+                "description": "Validation Error",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/HTTPValidationError"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "/api/v1/processing/audio/{audio_record_id}": {
+          "post": {
+            "tags": [
+              "processing"
+            ],
+            "summary": "Start Processing",
+            "operationId": "start_processing_api_v1_processing_audio__audio_record_id__post",
+            "security": [
+              {
+                "HTTPBearer": []
+              }
+            ],
+            "parameters": [
+              {
+                "name": "audio_record_id",
+                "in": "path",
+                "required": true,
+                "schema": {
+                  "type": "integer",
+                  "title": "Audio Record Id"
+                }
+              }
+            ],
+            "responses": {
+              "202": {
+                "description": "Successful Response",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/ProcessingJobResponse"
+                    }
+                  }
+                }
+              },
+              "422": {
+                "description": "Validation Error",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/HTTPValidationError"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "/api/v1/processing/{job_id}": {
+          "get": {
+            "tags": [
+              "processing"
+            ],
+            "summary": "Get Processing Status",
+            "operationId": "get_processing_status_api_v1_processing__job_id__get",
+            "security": [
+              {
+                "HTTPBearer": []
+              }
+            ],
+            "parameters": [
+              {
+                "name": "job_id",
+                "in": "path",
+                "required": true,
+                "schema": {
+                  "type": "integer",
+                  "title": "Job Id"
+                }
+              }
+            ],
+            "responses": {
+              "200": {
+                "description": "Successful Response",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/ProcessingJobResponse"
+                    }
+                  }
+                }
+              },
+              "422": {
+                "description": "Validation Error",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/HTTPValidationError"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "delete": {
+            "tags": [
+              "processing"
+            ],
+            "summary": "Cancel Processing",
+            "operationId": "cancel_processing_api_v1_processing__job_id__delete",
+            "security": [
+              {
+                "HTTPBearer": []
+              }
+            ],
+            "parameters": [
+              {
+                "name": "job_id",
+                "in": "path",
+                "required": true,
+                "schema": {
+                  "type": "integer",
+                  "title": "Job Id"
+                }
+              }
+            ],
+            "responses": {
+              "200": {
+                "description": "Successful Response",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/ProcessingJobResponse"
+                    }
+                  }
+                }
+              },
+              "422": {
+                "description": "Validation Error",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/HTTPValidationError"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "/api/v1/processing/{job_id}/result": {
+          "get": {
+            "tags": [
+              "processing"
+            ],
+            "summary": "Get Processing Result",
+            "operationId": "get_processing_result_api_v1_processing__job_id__result_get",
+            "security": [
+              {
+                "HTTPBearer": []
+              }
+            ],
+            "parameters": [
+              {
+                "name": "job_id",
+                "in": "path",
+                "required": true,
+                "schema": {
+                  "type": "integer",
+                  "title": "Job Id"
+                }
+              }
+            ],
+            "responses": {
+              "200": {
+                "description": "Successful Response",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/ProcessingResultResponse"
+                    }
+                  }
+                }
+              },
+              "422": {
+                "description": "Validation Error",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/HTTPValidationError"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "/api/v1/summaries": {
+          "get": {
+            "tags": [
+              "summaries"
+            ],
+            "summary": "List Summaries",
+            "operationId": "list_summaries_api_v1_summaries_get",
+            "security": [
+              {
+                "HTTPBearer": []
+              }
+            ],
+            "parameters": [
+              {
+                "name": "search",
+                "in": "query",
+                "required": false,
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Search"
+                }
+              },
+              {
+                "name": "category",
+                "in": "query",
+                "required": false,
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 100
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Category"
+                }
+              },
+              {
+                "name": "mood",
+                "in": "query",
+                "required": false,
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Mood"
+                }
+              },
+              {
+                "name": "action_status",
+                "in": "query",
+                "required": false,
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Action Status"
+                }
+              },
+              {
+                "name": "date_from",
+                "in": "query",
+                "required": false,
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Date From"
+                }
+              },
+              {
+                "name": "date_to",
+                "in": "query",
+                "required": false,
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Date To"
+                }
+              },
+              {
+                "name": "limit",
+                "in": "query",
+                "required": false,
+                "schema": {
+                  "type": "integer",
+                  "maximum": 100,
+                  "minimum": 1,
+                  "default": 20,
+                  "title": "Limit"
+                }
+              },
+              {
+                "name": "offset",
+                "in": "query",
+                "required": false,
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "default": 0,
+                  "title": "Offset"
+                }
+              }
+            ],
+            "responses": {
+              "200": {
+                "description": "Successful Response",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/SummaryListResponse"
+                    }
+                  }
+                }
+              },
+              "422": {
+                "description": "Validation Error",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/HTTPValidationError"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "/api/v1/summaries/{summary_id}": {
+          "get": {
+            "tags": [
+              "summaries"
+            ],
+            "summary": "Get Summary",
+            "operationId": "get_summary_api_v1_summaries__summary_id__get",
+            "security": [
+              {
+                "HTTPBearer": []
+              }
+            ],
+            "parameters": [
+              {
+                "name": "summary_id",
+                "in": "path",
+                "required": true,
+                "schema": {
+                  "type": "integer",
+                  "title": "Summary Id"
+                }
+              }
+            ],
+            "responses": {
+              "200": {
+                "description": "Successful Response",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/SummaryResponse"
+                    }
+                  }
+                }
+              },
+              "422": {
+                "description": "Validation Error",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/HTTPValidationError"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "patch": {
+            "tags": [
+              "summaries"
+            ],
+            "summary": "Update Summary",
+            "operationId": "update_summary_api_v1_summaries__summary_id__patch",
+            "security": [
+              {
+                "HTTPBearer": []
+              }
+            ],
+            "parameters": [
+              {
+                "name": "summary_id",
+                "in": "path",
+                "required": true,
+                "schema": {
+                  "type": "integer",
+                  "title": "Summary Id"
+                }
+              }
+            ],
+            "requestBody": {
+              "required": true,
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/SummaryUpdate"
+                  }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "Successful Response",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/SummaryResponse"
+                    }
+                  }
+                }
+              },
+              "422": {
+                "description": "Validation Error",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/HTTPValidationError"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "delete": {
+            "tags": [
+              "summaries"
+            ],
+            "summary": "Delete Summary",
+            "operationId": "delete_summary_api_v1_summaries__summary_id__delete",
+            "security": [
+              {
+                "HTTPBearer": []
+              }
+            ],
+            "parameters": [
+              {
+                "name": "summary_id",
+                "in": "path",
+                "required": true,
+                "schema": {
+                  "type": "integer",
+                  "title": "Summary Id"
+                }
+              }
+            ],
+            "responses": {
+              "204": {
+                "description": "Successful Response"
+              },
+              "422": {
+                "description": "Validation Error",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/HTTPValidationError"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "/api/v1/events/{event_id}/summaries": {
+          "get": {
+            "tags": [
+              "summaries"
+            ],
+            "summary": "List Event Summaries",
+            "operationId": "list_event_summaries_api_v1_events__event_id__summaries_get",
+            "security": [
+              {
+                "HTTPBearer": []
+              }
+            ],
+            "parameters": [
+              {
+                "name": "event_id",
+                "in": "path",
+                "required": true,
+                "schema": {
+                  "type": "integer",
+                  "title": "Event Id"
+                }
+              }
+            ],
+            "responses": {
+              "200": {
+                "description": "Successful Response",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/SummaryListResponse"
+                    }
+                  }
+                }
+              },
+              "422": {
+                "description": "Validation Error",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/HTTPValidationError"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "/api/v1/audio/{audio_record_id}/summary": {
+          "get": {
+            "tags": [
+              "summaries"
+            ],
+            "summary": "Get Audio Summary",
+            "operationId": "get_audio_summary_api_v1_audio__audio_record_id__summary_get",
+            "security": [
+              {
+                "HTTPBearer": []
+              }
+            ],
+            "parameters": [
+              {
+                "name": "audio_record_id",
+                "in": "path",
+                "required": true,
+                "schema": {
+                  "type": "integer",
+                  "title": "Audio Record Id"
+                }
+              }
+            ],
+            "responses": {
+              "200": {
+                "description": "Successful Response",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/SummaryResponse"
+                    }
+                  }
+                }
+              },
+              "422": {
+                "description": "Validation Error",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/HTTPValidationError"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "/api/v1/events": {
+          "get": {
+            "tags": [
+              "events"
+            ],
+            "summary": "List Events",
+            "operationId": "list_events_api_v1_events_get",
+            "responses": {
+              "200": {
+                "description": "Successful Response",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "items": {
+                        "$ref": "#/components/schemas/EventResponse"
+                      },
+                      "type": "array",
+                      "title": "Response List Events Api V1 Events Get"
+                    }
+                  }
+                }
+              }
+            },
+            "security": [
+              {
+                "HTTPBearer": []
+              }
+            ]
+          },
+          "post": {
+            "tags": [
+              "events"
+            ],
+            "summary": "Create Event",
+            "operationId": "create_event_api_v1_events_post",
+            "requestBody": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/EventCreate"
+                  }
+                }
+              },
+              "required": true
+            },
+            "responses": {
+              "201": {
+                "description": "Successful Response",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/EventResponse"
+                    }
+                  }
+                }
+              },
+              "422": {
+                "description": "Validation Error",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/HTTPValidationError"
+                    }
+                  }
+                }
+              }
+            },
+            "security": [
+              {
+                "HTTPBearer": []
+              }
+            ]
+          }
+        },
+        "/api/v1/events/{event_id}": {
+          "get": {
+            "tags": [
+              "events"
+            ],
+            "summary": "Get Event",
+            "operationId": "get_event_api_v1_events__event_id__get",
+            "security": [
+              {
+                "HTTPBearer": []
+              }
+            ],
+            "parameters": [
+              {
+                "name": "event_id",
+                "in": "path",
+                "required": true,
+                "schema": {
+                  "type": "integer",
+                  "title": "Event Id"
+                }
+              }
+            ],
+            "responses": {
+              "200": {
+                "description": "Successful Response",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/EventResponse"
+                    }
+                  }
+                }
+              },
+              "422": {
+                "description": "Validation Error",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/HTTPValidationError"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "/health": {
+          "get": {
+            "tags": [
+              "health"
+            ],
+            "summary": "Health",
+            "operationId": "health_health_get",
+            "responses": {
+              "200": {
+                "description": "Successful Response",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "type": "object",
+                      "title": "Response Health Health Get"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "components": {
+        "schemas": {
+          "ActionStatus": {
+            "type": "string",
+            "enum": [
+              "Pending",
+              "Completed",
+              "No Action"
+            ],
+            "title": "ActionStatus"
+          },
+          "AudioRecordResponse": {
+            "properties": {
+              "id": {
+                "type": "integer",
+                "title": "Id"
+              },
+              "event_id": {
+                "type": "integer",
+                "title": "Event Id"
+              },
+              "filename": {
+                "type": "string",
+                "title": "Filename"
+              },
+              "format": {
+                "type": "string",
+                "title": "Format"
+              },
+              "size": {
+                "type": "integer",
+                "title": "Size"
+              },
+              "duration": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Duration"
+              },
+              "audio_path": {
+                "type": "string",
+                "title": "Audio Path"
+              },
+              "created_at": {
+                "type": "string",
+                "format": "date-time",
+                "title": "Created At"
+              },
+              "updated_at": {
+                "type": "string",
+                "format": "date-time",
+                "title": "Updated At"
+              },
+              "client_recording_id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Client Recording Id"
+              }
+            },
+            "type": "object",
+            "required": [
+              "id",
+              "event_id",
+              "filename",
+              "format",
+              "size",
+              "duration",
+              "audio_path",
+              "created_at",
+              "updated_at"
+            ],
+            "title": "AudioRecordResponse"
+          },
+          "Body_upload_audio_api_v1_audio_post": {
+            "properties": {
+              "event_id": {
+                "type": "integer",
+                "title": "Event Id"
+              },
+              "client_recording_id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Client Recording Id"
+              },
+              "file": {
+                "type": "string",
+                "format": "binary",
+                "title": "File"
+              }
+            },
+            "type": "object",
+            "required": [
+              "event_id",
+              "file"
+            ],
+            "title": "Body_upload_audio_api_v1_audio_post"
+          },
+          "EventCreate": {
+            "properties": {
+              "title": {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1,
+                "title": "Title"
+              },
+              "category": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 100
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Category"
+              }
+            },
+            "type": "object",
+            "required": [
+              "title"
+            ],
+            "title": "EventCreate"
+          },
+          "EventResponse": {
+            "properties": {
+              "id": {
+                "type": "integer",
+                "title": "Id"
+              },
+              "title": {
+                "type": "string",
+                "title": "Title"
+              },
+              "category": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Category"
+              },
+              "created_at": {
+                "type": "string",
+                "format": "date-time",
+                "title": "Created At"
+              },
+              "updated_at": {
+                "type": "string",
+                "format": "date-time",
+                "title": "Updated At"
+              }
+            },
+            "type": "object",
+            "required": [
+              "id",
+              "title",
+              "category",
+              "created_at",
+              "updated_at"
+            ],
+            "title": "EventResponse"
+          },
+          "HTTPValidationError": {
+            "properties": {
+              "detail": {
+                "items": {
+                  "$ref": "#/components/schemas/ValidationError"
+                },
+                "type": "array",
+                "title": "Detail"
+              }
+            },
+            "type": "object",
+            "title": "HTTPValidationError"
+          },
+          "LoginRequest": {
+            "properties": {
+              "email": {
+                "type": "string",
+                "format": "email",
+                "title": "Email"
+              },
+              "password": "[REDACTED]"
+            },
+            "type": "object",
+            "required": [
+              "email",
+              "password"
+            ],
+            "title": "LoginRequest"
+          },
+          "Mood": {
+            "type": "string",
+            "enum": [
+              "Positive",
+              "Neutral",
+              "Negative"
+            ],
+            "title": "Mood"
+          },
+          "ProcessingJobResponse": {
+            "properties": {
+              "id": {
+                "type": "integer",
+                "title": "Id"
+              },
+              "audio_record_id": {
+                "type": "integer",
+                "title": "Audio Record Id"
+              },
+              "status": {
+                "$ref": "#/components/schemas/ProcessingStatus"
+              },
+              "transcription_status": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/TranscriptionStatus"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "error_message": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Error Message"
+              },
+              "created_at": {
+                "type": "string",
+                "format": "date-time",
+                "title": "Created At"
+              },
+              "updated_at": {
+                "type": "string",
+                "format": "date-time",
+                "title": "Updated At"
+              }
+            },
+            "type": "object",
+            "required": [
+              "id",
+              "audio_record_id",
+              "status",
+              "transcription_status",
+              "error_message",
+              "created_at",
+              "updated_at"
+            ],
+            "title": "ProcessingJobResponse"
+          },
+          "ProcessingResultResponse": {
+            "properties": {
+              "id": {
+                "type": "integer",
+                "title": "Id"
+              },
+              "audio_record_id": {
+                "type": "integer",
+                "title": "Audio Record Id"
+              },
+              "status": {
+                "$ref": "#/components/schemas/ProcessingStatus"
+              },
+              "transcription_status": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/TranscriptionStatus"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "error_message": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Error Message"
+              },
+              "created_at": {
+                "type": "string",
+                "format": "date-time",
+                "title": "Created At"
+              },
+              "updated_at": {
+                "type": "string",
+                "format": "date-time",
+                "title": "Updated At"
+              },
+              "audio": {
+                "$ref": "#/components/schemas/AudioRecordResponse"
+              },
+              "event_title": {
+                "type": "string",
+                "title": "Event Title"
+              },
+              "event_category": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Event Category"
+              },
+              "transcript_text": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Transcript Text"
+              },
+              "transcript_language": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Transcript Language"
+              },
+              "summary": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Summary"
+              },
+              "key_points": {
+                "anyOf": [
+                  {
+                    "items": {},
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Key Points"
+              },
+              "action_items": {
+                "anyOf": [
+                  {
+                    "items": {},
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Action Items"
+              },
+              "keywords": {
+                "anyOf": [
+                  {
+                    "items": {},
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Keywords"
+              },
+              "category": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Category"
+              },
+              "mood": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Mood"
+              },
+              "action_status": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Action Status"
+              },
+              "message": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Message"
+              }
+            },
+            "type": "object",
+            "required": [
+              "id",
+              "audio_record_id",
+              "status",
+              "transcription_status",
+              "error_message",
+              "created_at",
+              "updated_at",
+              "audio",
+              "event_title",
+              "event_category",
+              "transcript_text",
+              "transcript_language",
+              "summary",
+              "key_points",
+              "action_items",
+              "keywords",
+              "category",
+              "mood",
+              "action_status",
+              "message"
+            ],
+            "title": "ProcessingResultResponse"
+          },
+          "ProcessingStatus": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "processing",
+              "completed",
+              "failed",
+              "cancelled"
+            ],
+            "title": "ProcessingStatus"
+          },
+          "RegisterRequest": {
+            "properties": {
+              "email": {
+                "type": "string",
+                "format": "email",
+                "title": "Email"
+              },
+              "password": "[REDACTED]",
+              "display_name": {
+                "type": "string",
+                "maxLength": 100,
+                "minLength": 1,
+                "title": "Display Name"
+              }
+            },
+            "type": "object",
+            "required": [
+              "email",
+              "password",
+              "display_name"
+            ],
+            "title": "RegisterRequest"
+          },
+          "SummaryListResponse": {
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/SummaryResponse"
+                },
+                "type": "array",
+                "title": "Items"
+              },
+              "total": {
+                "type": "integer",
+                "title": "Total"
+              },
+              "limit": {
+                "type": "integer",
+                "title": "Limit"
+              },
+              "offset": {
+                "type": "integer",
+                "title": "Offset"
+              }
+            },
+            "type": "object",
+            "required": [
+              "items",
+              "total",
+              "limit",
+              "offset"
+            ],
+            "title": "SummaryListResponse"
+          },
+          "SummaryResponse": {
+            "properties": {
+              "id": {
+                "type": "integer",
+                "title": "Id"
+              },
+              "transcript_id": {
+                "type": "integer",
+                "title": "Transcript Id"
+              },
+              "audio_record_id": {
+                "type": "integer",
+                "title": "Audio Record Id"
+              },
+              "client_recording_id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Client Recording Id"
+              },
+              "event_id": {
+                "type": "integer",
+                "title": "Event Id"
+              },
+              "event_title": {
+                "type": "string",
+                "title": "Event Title"
+              },
+              "audio_filename": {
+                "type": "string",
+                "title": "Audio Filename"
+              },
+              "summary": {
+                "type": "string",
+                "title": "Summary"
+              },
+              "key_points": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Key Points"
+              },
+              "action_items": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Action Items"
+              },
+              "keywords": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Keywords"
+              },
+              "category": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Category"
+              },
+              "mood": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Mood"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "action_status": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ActionStatus"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "created_at": {
+                "type": "string",
+                "format": "date-time",
+                "title": "Created At"
+              },
+              "updated_at": {
+                "type": "string",
+                "format": "date-time",
+                "title": "Updated At"
+              }
+            },
+            "type": "object",
+            "required": [
+              "id",
+              "transcript_id",
+              "audio_record_id",
+              "event_id",
+              "event_title",
+              "audio_filename",
+              "summary",
+              "key_points",
+              "action_items",
+              "keywords",
+              "category",
+              "mood",
+              "action_status",
+              "created_at",
+              "updated_at"
+            ],
+            "title": "SummaryResponse"
+          },
+          "SummaryUpdate": {
+            "properties": {
+              "summary": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Summary"
+              },
+              "key_points": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Key Points"
+              },
+              "action_items": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Action Items"
+              },
+              "keywords": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Keywords"
+              },
+              "category": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 100
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Category"
+              },
+              "mood": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Mood"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "action_status": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ActionStatus"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "type": "object",
+            "title": "SummaryUpdate"
+          },
+          "TokenResponse": {
+            "properties": {
+              "access_token": "[REDACTED]",
+              "token_type": {
+                "type": "string",
+                "title": "Token Type",
+                "default": "bearer"
+              }
+            },
+            "type": "object",
+            "required": [
+              "access_token"
+            ],
+            "title": "TokenResponse"
+          },
+          "TranscriptionStatus": {
+            "type": "string",
+            "enum": [
+              "success",
+              "invalid_audio",
+              "no_speech",
+              "unclear_speech",
+              "failed"
+            ],
+            "title": "TranscriptionStatus"
+          },
+          "UserResponse": {
+            "properties": {
+              "id": {
+                "type": "integer",
+                "title": "Id"
+              },
+              "email": {
+                "type": "string",
+                "format": "email",
+                "title": "Email"
+              },
+              "display_name": {
+                "type": "string",
+                "title": "Display Name"
+              },
+              "is_active": {
+                "type": "boolean",
+                "title": "Is Active"
+              },
+              "created_at": {
+                "type": "string",
+                "format": "date-time",
+                "title": "Created At"
+              }
+            },
+            "type": "object",
+            "required": [
+              "id",
+              "email",
+              "display_name",
+              "is_active",
+              "created_at"
+            ],
+            "title": "UserResponse"
+          },
+          "ValidationError": {
+            "properties": {
+              "loc": {
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "integer"
+                    }
+                  ]
+                },
+                "type": "array",
+                "title": "Location"
+              },
+              "msg": {
+                "type": "string",
+                "title": "Message"
+              },
+              "type": {
+                "type": "string",
+                "title": "Error Type"
+              }
+            },
+            "type": "object",
+            "required": [
+              "loc",
+              "msg",
+              "type"
+            ],
+            "title": "ValidationError"
+          }
+        },
+        "securitySchemes": {
+          "HTTPBearer": {
+            "type": "http",
+            "scheme": "bearer"
+          }
+        }
+      }
+    }
+  },
+  {
+    "timestamp": "2026-11-01T10:17:36.916436+00:00",
+    "label": "register diagnostic account",
+    "method": "POST",
+    "url": "http://127.0.0.1:8000/api/v1/auth/register",
+    "status": 201,
+    "elapsed_seconds": 0.173,
+    "request": {
+      "json": {
+        "email": "vome-diagnostic-13832e691328@example.com",
+        "password": "[REDACTED]",
+        "display_name": "VoMe API Diagnostic"
+      },
+      "data": null,
+      "files": null
+    },
+    "response": {
+      "id": 2,
+      "email": "vome-diagnostic-13832e691328@example.com",
+      "display_name": "VoMe API Diagnostic",
+      "is_active": true,
+      "created_at": "2026-11-01T10:17:36"
+    }
+  },
+  {
+    "timestamp": "2026-11-01T10:17:36.996389+00:00",
+    "label": "login diagnostic account",
+    "method": "POST",
+    "url": "http://127.0.0.1:8000/api/v1/auth/login",
+    "status": 200,
+    "elapsed_seconds": 0.08,
+    "request": {
+      "json": {
+        "email": "vome-diagnostic-13832e691328@example.com",
+        "password": "[REDACTED]"
+      },
+      "data": null,
+      "files": null
+    },
+    "response": {
+      "access_token": "[REDACTED]",
+      "token_type": "bearer"
+    }
+  },
+  {
+    "timestamp": "2026-11-01T10:17:37.011953+00:00",
+    "label": "inspect existing events",
+    "method": "GET",
+    "url": "http://127.0.0.1:8000/api/v1/events",
+    "status": 200,
+    "elapsed_seconds": 0.016,
+    "request": {
+      "json": null,
+      "data": null,
+      "files": null
+    },
+    "response": []
+  },
+  {
+    "timestamp": "2026-11-01T10:17:37.027784+00:00",
+    "label": "inspect existing audio",
+    "method": "GET",
+    "url": "http://127.0.0.1:8000/api/v1/audio",
+    "status": 200,
+    "elapsed_seconds": 0.016,
+    "request": {
+      "json": null,
+      "data": null,
+      "files": null
+    },
+    "response": []
+  },
+  {
+    "timestamp": "2026-11-01T10:17:37.051596+00:00",
+    "label": "create diagnostic event",
+    "method": "POST",
+    "url": "http://127.0.0.1:8000/api/v1/events",
+    "status": 201,
+    "elapsed_seconds": 0.024,
+    "request": {
+      "json": {
+        "title": "VoMe API Diagnostic 13832e691328",
+        "category": "Diagnostic"
+      },
+      "data": null,
+      "files": null
+    },
+    "response": {
+      "id": 62,
+      "title": "VoMe API Diagnostic 13832e691328",
+      "category": "Diagnostic",
+      "created_at": "2026-11-01T10:17:37",
+      "updated_at": "2026-11-01T10:17:37"
+    }
+  },
+  {
+    "timestamp": "2026-11-01T10:17:37.082873+00:00",
+    "label": "upload diagnostic audio",
+    "method": "POST",
+    "url": "http://127.0.0.1:8000/api/v1/audio",
+    "status": 201,
+    "elapsed_seconds": 0.028,
+    "request": {
+      "json": null,
+      "data": {
+        "event_id": "62",
+        "client_recording_id": "diagnostic-13832e691328"
+      },
+      "files": {
+        "file": {
+          "filename": "83f03986318d49f5a01ea253e1afdd85.m4a",
+          "content_type": "audio/mp4"
+        }
+      }
+    },
+    "response": {
+      "id": 24,
+      "event_id": 62,
+      "filename": "83f03986318d49f5a01ea253e1afdd85.m4a",
+      "format": "m4a",
+      "size": 22577,
+      "duration": null,
+      "audio_path": "016078a4931c404cb32a6c29164affc3.m4a",
+      "created_at": "2026-11-01T10:17:37",
+      "updated_at": "2026-11-01T10:17:37",
+      "client_recording_id": "diagnostic-13832e691328"
+    }
+  },
+  {
+    "timestamp": "2026-11-01T10:17:37.124290+00:00",
+    "label": "start processing",
+    "method": "POST",
+    "url": "http://127.0.0.1:8000/api/v1/processing/audio/24",
+    "status": 202,
+    "elapsed_seconds": 0.041,
+    "request": {
+      "json": null,
+      "data": null,
+      "files": null
+    },
+    "response": {
+      "id": 24,
+      "audio_record_id": 24,
+      "status": "pending",
+      "transcription_status": null,
+      "error_message": null,
+      "created_at": "2026-11-01T10:17:37",
+      "updated_at": "2026-11-01T10:17:37"
+    }
+  },
+  {
+    "timestamp": "2026-11-01T10:17:37.141958+00:00",
+    "label": "poll processing job",
+    "method": "GET",
+    "url": "http://127.0.0.1:8000/api/v1/processing/24",
+    "status": 200,
+    "elapsed_seconds": 0.018,
+    "request": {
+      "json": null,
+      "data": null,
+      "files": null
+    },
+    "response": {
+      "id": 24,
+      "audio_record_id": 24,
+      "status": "processing",
+      "transcription_status": null,
+      "error_message": null,
+      "created_at": "2026-11-01T10:17:37",
+      "updated_at": "2026-11-01T10:17:37"
+    }
+  },
+  {
+    "timestamp": "2026-11-01T10:17:39.153767+00:00",
+    "label": "poll processing job",
+    "method": "GET",
+    "url": "http://127.0.0.1:8000/api/v1/processing/24",
+    "status": 200,
+    "elapsed_seconds": 0.012,
+    "request": {
+      "json": null,
+      "data": null,
+      "files": null
+    },
+    "response": {
+      "id": 24,
+      "audio_record_id": 24,
+      "status": "completed",
+      "transcription_status": "success",
+      "error_message": null,
+      "created_at": "2026-11-01T10:17:37",
+      "updated_at": "2026-11-01T10:17:37"
+    }
+  },
+  {
+    "timestamp": "2026-11-01T10:17:39.168386+00:00",
+    "label": "retrieve processing result",
+    "method": "GET",
+    "url": "http://127.0.0.1:8000/api/v1/processing/24/result",
+    "status": 200,
+    "elapsed_seconds": 0.014,
+    "request": {
+      "json": null,
+      "data": null,
+      "files": null
+    },
+    "response": {
+      "id": 24,
+      "audio_record_id": 24,
+      "status": "completed",
+      "transcription_status": "success",
+      "error_message": null,
+      "created_at": "2026-11-01T10:17:37",
+      "updated_at": "2026-11-01T10:17:37",
+      "audio": {
+        "id": 24,
+        "event_id": 62,
+        "filename": "83f03986318d49f5a01ea253e1afdd85.m4a",
+        "format": "m4a",
+        "size": 22577,
+        "duration": null,
+        "audio_path": "016078a4931c404cb32a6c29164affc3.m4a",
+        "created_at": "2026-11-01T10:17:37",
+        "updated_at": "2026-11-01T10:17:37",
+        "client_recording_id": "diagnostic-13832e691328"
+      },
+      "event_title": "VoMe API Diagnostic 13832e691328",
+      "event_category": "Diagnostic",
+      "transcript_text": "Mock transcript for 83f03986318d49f5a01ea253e1afdd85.m4a",
+      "transcript_language": "en",
+      "summary": "Mock summary: Mock transcript for 83f03986318d49f5a01ea253e1afdd85.m4a",
+      "key_points": [
+        "Mock processing completed"
+      ],
+      "action_items": [],
+      "keywords": [
+        "mock",
+        "audio"
+      ],
+      "category": "General",
+      "mood": "Neutral",
+      "action_status": "No Action",
+      "message": null
+    }
+  },
+  {
+    "timestamp": "2026-11-01T10:17:39.198380+00:00",
+    "label": "generate summary by job",
+    "method": "POST",
+    "url": "http://127.0.0.1:8000/api/v1/processing/24/summary",
+    "status": 404,
+    "elapsed_seconds": 0.03,
+    "request": {
+      "json": null,
+      "data": null,
+      "files": null
+    },
+    "response": {
+      "detail": "Not Found"
+    }
+  },
+  {
+    "timestamp": "2026-11-01T10:17:39.227537+00:00",
+    "label": "generate summary by audio fallback",
+    "method": "POST",
+    "url": "http://127.0.0.1:8000/api/v1/processing/audio/24/summary",
+    "status": 404,
+    "elapsed_seconds": 0.029,
+    "request": {
+      "json": null,
+      "data": null,
+      "files": null
+    },
+    "response": {
+      "detail": "Not Found"
+    }
+  },
+  {
+    "timestamp": "2026-11-01T10:17:39.243686+00:00",
+    "label": "retrieve summary by audio",
+    "method": "GET",
+    "url": "http://127.0.0.1:8000/api/v1/audio/24/summary",
+    "status": 200,
+    "elapsed_seconds": 0.016,
+    "request": {
+      "json": null,
+      "data": null,
+      "files": null
+    },
+    "response": {
+      "id": 2,
+      "transcript_id": 23,
+      "audio_record_id": 24,
+      "client_recording_id": "diagnostic-13832e691328",
+      "event_id": 62,
+      "event_title": "VoMe API Diagnostic 13832e691328",
+      "audio_filename": "83f03986318d49f5a01ea253e1afdd85.m4a",
+      "summary": "Mock summary: Mock transcript for 83f03986318d49f5a01ea253e1afdd85.m4a",
+      "key_points": [
+        "Mock processing completed"
+      ],
+      "action_items": [],
+      "keywords": [
+        "mock",
+        "audio"
+      ],
+      "category": "General",
+      "mood": "Neutral",
+      "action_status": "No Action",
+      "created_at": "2026-11-01T10:17:37",
+      "updated_at": "2026-11-01T10:17:37"
+    }
+  },
+  {
+    "timestamp": "2026-11-01T10:17:39.282814+00:00",
+    "label": "list persisted summaries",
+    "method": "GET",
+    "url": "http://127.0.0.1:8000/api/v1/summaries?limit=100",
+    "status": 200,
+    "elapsed_seconds": 0.039,
+    "request": {
+      "json": null,
+      "data": null,
+      "files": null
+    },
+    "response": {
+      "items": [
+        {
+          "id": 2,
+          "transcript_id": 23,
+          "audio_record_id": 24,
+          "client_recording_id": "diagnostic-13832e691328",
+          "event_id": 62,
+          "event_title": "VoMe API Diagnostic 13832e691328",
+          "audio_filename": "83f03986318d49f5a01ea253e1afdd85.m4a",
+          "summary": "Mock summary: Mock transcript for 83f03986318d49f5a01ea253e1afdd85.m4a",
+          "key_points": [
+            "Mock processing completed"
+          ],
+          "action_items": [],
+          "keywords": [
+            "mock",
+            "audio"
+          ],
+          "category": "General",
+          "mood": "Neutral",
+          "action_status": "No Action",
+          "created_at": "2026-11-01T10:17:37",
+          "updated_at": "2026-11-01T10:17:37"
+        }
+      ],
+      "total": 1,
+      "limit": 100,
+      "offset": 0
+    }
+  }
+]

@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
-
 import '../models/recording.dart';
 import 'audio_api_service.dart';
 import 'audio_storage_service.dart';
@@ -20,7 +18,7 @@ class ProcessingService {
 
   static final instance = ProcessingService._();
   final Set<String> _trackedRecordings = <String>{};
-  final Map<String, Future<RemoteSummary>> _summaryRequests =
+  final Map<String, Future<RemoteSummary>> _processingRequests =
       <String, Future<RemoteSummary>>{};
   static const _maxUploadBytes = 25 * 1024 * 1024;
 
@@ -35,8 +33,7 @@ class ProcessingService {
   }
 
   Future<ProcessingResult> enqueue(Recording recording) async {
-    if (recording.status == 'Completed' ||
-        recording.status == 'AwaitingDecision') {
+    if (recording.status == 'Completed') {
       return const ProcessingResult.success();
     }
     if (!_trackedRecordings.add(recording.id)) {
@@ -128,7 +125,7 @@ class ProcessingService {
     for (final recording in recordings) {
       if (recording.status == 'Pending' ||
           (recording.processingJobId != null && recording.status != 'Failed')) {
-        unawaited(processToSummary(recording));
+        unawaited(processRecording(recording));
       }
     }
   }
@@ -140,36 +137,21 @@ class ProcessingService {
     return api.processingResult(int.parse(jobId));
   }
 
-  Future<RemoteSummary> generateSummary(Recording recording) async {
-    final api = _api;
-    final jobId = recording.processingJobId;
-    if (api == null || jobId == null) {
-      throw StateError('Transcript processing is not available.');
-    }
-    final summary = await api.generateSummary(int.parse(jobId));
-    await RecordingRepository.instance.updateProcessing(
-      recording.id,
-      status: 'Completed',
-      transcript: summary.transcriptText,
-      summaryJson: jsonEncode(summary.toJson()),
-      error: null,
-    );
-    return summary;
-  }
-
-  Future<RemoteSummary> processToSummary(
+  Future<RemoteSummary> processRecording(
     Recording recording, {
     void Function(String stage)? onStage,
   }) {
-    final existing = _summaryRequests[recording.id];
+    final existing = _processingRequests[recording.id];
     if (existing != null) return existing;
-    final request = _processToSummary(recording, onStage: onStage);
-    _summaryRequests[recording.id] = request;
-    request.whenComplete(() => _summaryRequests.remove(recording.id)).ignore();
+    final request = _processRecording(recording, onStage: onStage);
+    _processingRequests[recording.id] = request;
+    request
+        .whenComplete(() => _processingRequests.remove(recording.id))
+        .ignore();
     return request;
   }
 
-  Future<RemoteSummary> _processToSummary(
+  Future<RemoteSummary> _processRecording(
     Recording recording, {
     void Function(String stage)? onStage,
   }) async {
@@ -191,21 +173,14 @@ class ProcessingService {
       int.parse(jobId),
       onStage: onStage,
     );
-    onStage?.call('Generating summary...');
-    try {
-      return await generateSummary(
-        await RecordingRepository.instance.getRecordingById(recording.id) ??
-            recording,
-      );
-    } catch (error) {
-      await RecordingRepository.instance.updateProcessing(
-        recording.id,
-        status: 'AwaitingSummary',
-        transcript: summary.transcriptText,
-        error: error.toString(),
-      );
-      rethrow;
-    }
+    onStage?.call('Transcription complete.');
+    await RecordingRepository.instance.updateProcessing(
+      recording.id,
+      status: 'Completed',
+      transcript: summary.transcriptText,
+      error: null,
+    );
+    return summary;
   }
 
   Future<RemoteSummary> _pollUntilTranscribed(
@@ -232,7 +207,27 @@ class ProcessingService {
           throw StateError('Processing was cancelled.');
         }
         if (job.status == 'completed') {
-          final summary = await api.processingResult(jobId);
+          final transcription = await api.processingResult(jobId);
+          if (transcription.transcriptionStatus != null &&
+              transcription.transcriptionStatus != 'success') {
+            await RecordingRepository.instance.updateProcessing(
+              recordingId,
+              status: 'Failed',
+              error: _outcomeError(
+                transcription.transcriptionStatus!,
+                transcription.message,
+              ),
+            );
+            throw StateError(
+              _outcomeError(
+                transcription.transcriptionStatus!,
+                transcription.message,
+              ),
+            );
+          }
+
+          onStage?.call('Generating summary...');
+          final summary = await api.generateSummary(jobId);
           if (summary.transcriptionStatus != null &&
               summary.transcriptionStatus != 'success') {
             await RecordingRepository.instance.updateProcessing(
@@ -249,7 +244,7 @@ class ProcessingService {
           }
           await RecordingRepository.instance.updateProcessing(
             recordingId,
-            status: 'AwaitingDecision',
+            status: 'Completed',
             transcript: summary.transcriptText,
             error: null,
           );
@@ -282,9 +277,7 @@ class ProcessingService {
         if (error is StateError) {
           await RecordingRepository.instance.updateProcessing(
             recordingId,
-            status: recording.status == 'AwaitingSummary'
-                ? 'AwaitingSummary'
-                : 'Failed',
+            status: 'Failed',
             error: error.toString(),
           );
         } else {

@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 import json
 from pathlib import Path
-from threading import Lock
+from threading import Lock, RLock
 from typing import Protocol
 
 from app.models import ActionStatus, Mood, TranscriptionStatus
@@ -102,7 +102,7 @@ class WhisperSttProvider:
 
     def _validate_audio(self, audio_path: Path) -> str | None:
         if not audio_path.exists():
-            return None
+            return "The audio file is missing or invalid"
         if audio_path.stat().st_size == 0:
             return "The audio file is empty or invalid"
         try:
@@ -253,7 +253,38 @@ class OpenAILlmProvider:
 
 
 _provider_cache: dict[tuple[object, ...], tuple[SttProvider, LlmProvider]] = {}
-_provider_cache_lock = Lock()
+_stt_provider_cache: dict[tuple[object, ...], SttProvider] = {}
+_provider_cache_lock = RLock()
+
+
+def get_configured_stt_provider(settings) -> SttProvider:
+    stt_name = settings.effective_stt_provider
+    key = (
+        stt_name,
+        settings.effective_whisper_model,
+        settings.whisper_device,
+        settings.effective_whisper_compute_type,
+        settings.whisper_language or None,
+        settings.whisper_model_dir or None,
+    )
+    provider = _stt_provider_cache.get(key)
+    if provider is None:
+        with _provider_cache_lock:
+            provider = _stt_provider_cache.get(key)
+            if provider is None:
+                provider = (
+                    WhisperSttProvider(
+                        model_name=settings.effective_whisper_model,
+                        device=settings.whisper_device,
+                        compute_type=settings.effective_whisper_compute_type,
+                        language=settings.whisper_language or None,
+                        model_dir=settings.whisper_model_dir or None,
+                    )
+                    if stt_name == "faster_whisper"
+                    else MockSttProvider()
+                )
+                _stt_provider_cache[key] = provider
+    return provider
 
 
 def get_configured_providers(settings) -> tuple[SttProvider, LlmProvider]:
@@ -281,17 +312,7 @@ def get_configured_providers(settings) -> tuple[SttProvider, LlmProvider]:
         with _provider_cache_lock:
             providers = _provider_cache.get(key)
             if providers is None:
-                stt_provider: SttProvider = (
-                    WhisperSttProvider(
-                        model_name=settings.effective_whisper_model,
-                        device=settings.whisper_device,
-                        compute_type=settings.effective_whisper_compute_type,
-                        language=settings.whisper_language or None,
-                        model_dir=settings.whisper_model_dir or None,
-                    )
-                    if stt_name == "faster_whisper"
-                    else MockSttProvider()
-                )
+                stt_provider = get_configured_stt_provider(settings)
                 llm_provider: LlmProvider = (
                     OpenAILlmProvider(
                         settings.openai_api_key,

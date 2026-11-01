@@ -1,6 +1,8 @@
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
+
+from app.core.config import get_settings
 import logging
 from pathlib import Path
 
@@ -16,9 +18,9 @@ from app.services.audio_storage_service import AudioStorageService
 from app.services.processing_providers import (
     LlmProvider,
     MockLlmProvider,
-    MockSttProvider,
     SttProvider,
     TranscriptResult,
+    get_configured_stt_provider,
 )
 
 logger = logging.getLogger(__name__)
@@ -34,7 +36,9 @@ class ProcessingService:
         storage_service: AudioStorageService | None = None,
     ) -> None:
         self.session_factory = session_factory
-        self.stt_provider = stt_provider or MockSttProvider()
+        self.stt_provider = stt_provider or get_configured_stt_provider(
+            get_settings()
+        )
         self.llm_provider = llm_provider or MockLlmProvider()
         self.storage_service = storage_service or AudioStorageService()
 
@@ -92,7 +96,7 @@ class ProcessingService:
                 if failed_job is not None and not self._is_cancelled(db, job_id):
                     failed_job.status = ProcessingStatus.FAILED
                     failed_job.transcription_status = TranscriptionStatus.FAILED
-                    failed_job.error_message = "Audio processing failed"
+                    failed_job.error_message = str(exc)[:2000] or "Audio processing failed"
                     db.commit()
             finally:
                 if audio_path is not None:
