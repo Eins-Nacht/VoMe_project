@@ -69,6 +69,7 @@ class RemoteProcessingJob {
   final String status;
   final String? errorMessage;
   final String? transcriptionStatus;
+  final String? processingStage;
 
   const RemoteProcessingJob({
     required this.id,
@@ -76,6 +77,7 @@ class RemoteProcessingJob {
     required this.status,
     this.errorMessage,
     this.transcriptionStatus,
+    this.processingStage,
   });
 
   factory RemoteProcessingJob.fromJson(Map<String, dynamic> json) =>
@@ -85,6 +87,7 @@ class RemoteProcessingJob {
         status: json['status'] as String,
         errorMessage: json['error_message'] as String?,
         transcriptionStatus: json['transcription_status'] as String?,
+        processingStage: json['processing_stage'] as String?,
       );
 }
 
@@ -105,6 +108,8 @@ class RemoteSummary {
   final String? transcriptionStatus;
   final String? message;
   final String? transcriptText;
+  final String? rawTranscript;
+  final String? correctedTranscript;
   final String? transcriptLanguage;
 
   const RemoteSummary({
@@ -124,6 +129,8 @@ class RemoteSummary {
     this.transcriptionStatus,
     this.message,
     this.transcriptText,
+    this.rawTranscript,
+    this.correctedTranscript,
     this.transcriptLanguage,
   });
 
@@ -144,6 +151,8 @@ class RemoteSummary {
     transcriptionStatus: json['transcription_status'] as String?,
     message: json['message'] as String?,
     transcriptText: json['transcript_text'] as String?,
+    rawTranscript: json['raw_transcript'] as String?,
+    correctedTranscript: json['corrected_transcript'] as String?,
     transcriptLanguage: json['transcript_language'] as String?,
   );
 
@@ -167,6 +176,8 @@ class RemoteSummary {
       transcriptionStatus: json['transcription_status'] as String?,
       message: json['message'] as String?,
       transcriptText: json['transcript_text'] as String?,
+      rawTranscript: json['raw_transcript'] as String?,
+      correctedTranscript: json['corrected_transcript'] as String?,
       transcriptLanguage: json['transcript_language'] as String?,
     );
   }

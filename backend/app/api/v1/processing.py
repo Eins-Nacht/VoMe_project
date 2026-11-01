@@ -56,12 +56,21 @@ def _result_response(job: ProcessingJob) -> ProcessingResultResponse:
         status=job.status,
         transcription_status=job.transcription_status,
         error_message=job.error_message,
+        processing_stage=job.processing_stage,
         created_at=job.created_at,
         updated_at=job.updated_at,
         audio=audio_response(job.audio_record),
         event_title=job.audio_record.event.title,
         event_category=job.audio_record.event.category,
-        transcript_text=transcript.text if transcript else None,
+        transcript_text=(
+            transcript.corrected_transcript or transcript.raw_transcript or transcript.text
+            if transcript
+            else None
+        ),
+        raw_transcript=(
+            transcript.raw_transcript or transcript.text if transcript else None
+        ),
+        corrected_transcript=transcript.corrected_transcript if transcript else None,
         transcript_language=transcript.language if transcript else None,
         summary=summary.summary if summary else None,
         key_points=summary.key_points if summary else None,
@@ -130,6 +139,7 @@ def start_processing(
         return job
 
     job.status = ProcessingStatus.PENDING
+    job.processing_stage = None
     job.error_message = None
     db.commit()
     session_factory = getattr(request.app.state, "testing_session", SessionLocal)
@@ -212,7 +222,7 @@ def generate_summary(
     db: Session = Depends(get_db),
 ):
     job = _owned_job(db, current_user, job_id)
-    return _generate_summary_for_job(job)
+    return _generate_summary_for_job(job, request, current_user, db)
 
 
 @router.post(
@@ -239,16 +249,37 @@ def generate_audio_summary(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Processing job not found",
         )
-    return _generate_summary_for_job(job)
+    return _generate_summary_for_job(job, request, current_user, db)
 
 
 def _generate_summary_for_job(
     job: ProcessingJob,
+    request: Request,
+    current_user: User,
+    db: Session,
 ) -> ProcessingResultResponse:
-    raise HTTPException(
-        status_code=status.HTTP_409_CONFLICT,
-        detail=(
-            "Summary generation is disabled while VoMe is operating in "
-            "STT-only mode. Retrieve the persisted transcript instead."
-        ),
+    if job.status != ProcessingStatus.COMPLETED:
+        raise HTTPException(status_code=409, detail="Transcription has not completed")
+    session_factory = getattr(request.app.state, "testing_session", SessionLocal)
+    service = ProcessingService(session_factory)
+    try:
+        _, llm_provider = get_configured_providers(get_settings())
+        service.llm_provider = llm_provider
+        service.generate_summary(job.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    db.expire_all()
+    completed = _owned_job(db, current_user, job.id)
+    completed = db.scalar(
+        select(ProcessingJob)
+        .options(
+            joinedload(ProcessingJob.audio_record).joinedload(AudioRecord.event),
+            joinedload(ProcessingJob.audio_record)
+            .joinedload(AudioRecord.transcript)
+            .joinedload(Transcript.summary),
+        )
+        .where(ProcessingJob.id == job.id)
     )
+    return _result_response(completed)

@@ -8,6 +8,9 @@ import pytest
 from app.core.config import Settings
 from app.services import processing_providers
 from app.services.processing_providers import (
+    OllamaLlmProvider,
+    OllamaTranscriptCorrectionProvider,
+    TranscriptResult,
     WhisperSttProvider,
     get_configured_providers,
 )
@@ -21,6 +24,83 @@ def test_openai_provider_requires_api_key():
         get_configured_providers(
             Settings(llm_provider="openai", openai_api_key=None)
         )
+
+
+def test_ollama_correction_uses_configured_chat_endpoint(monkeypatch):
+    calls = []
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"message": {"content": "แก้ไขข้อความ"}}
+
+    def post(url, **kwargs):
+        calls.append((url, kwargs))
+        return Response()
+
+    monkeypatch.setattr(processing_providers.requests, "post", post)
+    provider = OllamaTranscriptCorrectionProvider(
+        "http://ollama.test/",
+        "custom-gemma",
+    )
+
+    assert provider.correct("ข้อความดิบ") == "แก้ไขข้อความ"
+    assert calls == [
+        (
+            "http://ollama.test/api/chat",
+            {
+                "json": {
+                    "model": "custom-gemma",
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": provider._system_prompt,
+                        },
+                        {"role": "user", "content": "ข้อความดิบ"},
+                    ],
+                    "stream": False,
+                },
+                "timeout": 30.0,
+            },
+        )
+    ]
+
+
+def test_ollama_summary_validates_structured_chat_response(monkeypatch):
+    calls = []
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "message": {
+                    "content": (
+                        '{"summary":"สรุป","key_points":["ประเด็น"],'
+                        '"action_items":[],"keywords":["คำ"],'
+                        '"category":"งาน","mood":"Neutral",'
+                        '"action_status":"No Action"}'
+                    )
+                }
+            }
+
+    def post(url, **kwargs):
+        calls.append((url, kwargs))
+        return Response()
+
+    monkeypatch.setattr(processing_providers.requests, "post", post)
+    provider = OllamaLlmProvider("http://ollama.test/", "custom-gemma")
+
+    result = provider.summarize(TranscriptResult("ข้อความ", "th"))
+
+    assert result.summary == "สรุป"
+    assert result.action_items == []
+    assert calls[0][0] == "http://ollama.test/api/chat"
+    assert calls[0][1]["json"]["model"] == "custom-gemma"
+    assert calls[0][1]["json"]["format"] == "json"
 
 
 def test_faster_whisper_requires_a_real_llm_provider_for_summaries():

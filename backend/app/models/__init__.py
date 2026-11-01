@@ -12,6 +12,7 @@ from app.models.event import Event
 from app.models.processing_job import (
     ProcessingJob,
     ProcessingStatus,
+    ProcessingStage,
     TranscriptionStatus,
 )
 from app.models.user import User
@@ -25,6 +26,7 @@ __all__ = [
     "Mood",
     "ProcessingJob",
     "ProcessingStatus",
+    "ProcessingStage",
     "TranscriptionStatus",
     "Summary",
     "Transcript",

@@ -34,6 +34,11 @@ class TestLlmProvider:
         )
 
 
+class TestTranscriptCorrectionProvider:
+    def correct(self, transcript):
+        return transcript
+
+
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     from app.core.config import get_settings
@@ -42,6 +47,7 @@ def client(tmp_path, monkeypatch):
 
     stt_provider = TestSttProvider()
     llm_provider = TestLlmProvider()
+    correction_provider = TestTranscriptCorrectionProvider()
     monkeypatch.setattr(
         processing_api,
         "get_configured_stt_provider",
@@ -51,6 +57,16 @@ def client(tmp_path, monkeypatch):
         processing_service,
         "get_configured_stt_provider",
         lambda settings: stt_provider,
+    )
+    monkeypatch.setattr(
+        processing_service,
+        "get_configured_transcript_correction_provider",
+        lambda settings: correction_provider,
+    )
+    monkeypatch.setattr(
+        processing_service,
+        "get_configured_llm_provider",
+        lambda settings: llm_provider,
     )
     monkeypatch.setattr(
         processing_api,

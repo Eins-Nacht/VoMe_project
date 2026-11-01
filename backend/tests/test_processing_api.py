@@ -60,7 +60,7 @@ def test_summary_generation_route_is_registered(client):
     assert openapi.json()["paths"]["/api/v1/processing/{job_id}/summary"]["post"]
 
 
-def test_processing_creates_transcript_without_summary(client, tmp_path):
+def test_processing_creates_transcript_and_summary(client, tmp_path):
     storage.root = tmp_path / "audio"
     headers = register_and_login(client, "processing@example.com")
     event_id = create_event(client, "processing@example.com")
@@ -82,12 +82,12 @@ def test_processing_creates_transcript_without_summary(client, tmp_path):
     assert result.json()["transcription_status"] == "success"
     assert result.json()["message"] is None
     assert result.json()["transcript_text"] == "Test transcript for sample.mp3"
-    assert result.json()["summary"] is None
+    assert result.json()["summary"] == "Test summary: Test transcript for sample.mp3"
     assert result.json()["event_title"] == "Processing event"
     assert result.json()["audio"]["filename"] == "sample.mp3"
     assert result.json()["audio"]["audio_path"] is None
-    assert result.json()["mood"] is None
-    assert result.json()["action_status"] is None
+    assert result.json()["mood"] == "Neutral"
+    assert result.json()["action_status"] == "No Action"
     db = client.app.state.testing_session()
     try:
         saved_audio = db.get(AudioRecord, audio["id"])
@@ -97,7 +97,7 @@ def test_processing_creates_transcript_without_summary(client, tmp_path):
         db.close()
 
 
-def test_processing_does_not_invoke_summary_provider(client, tmp_path):
+def test_processing_invokes_summary_provider(client, tmp_path):
     storage.root = tmp_path / "audio"
     headers = register_and_login(client, "transcription-only@example.com")
     event_id = create_event(client, "transcription-only@example.com")
@@ -111,15 +111,85 @@ def test_processing_does_not_invoke_summary_provider(client, tmp_path):
 
     assert result.status_code == 200
     assert result.json()["transcript_text"] == "Test transcript for sample.mp3"
-    assert result.json()["summary"] is None
+    assert result.json()["summary"] == "Test summary: Test transcript for sample.mp3"
     db = client.app.state.testing_session()
     try:
-        assert db.query(Summary).count() == 0
+        assert db.query(Summary).count() == 1
     finally:
         db.close()
 
 
-def test_summary_generation_is_disabled_in_stt_only_mode(client, tmp_path):
+def test_processing_saves_corrected_transcript_and_preserves_raw(
+    client,
+    tmp_path,
+    monkeypatch,
+):
+    storage.root = tmp_path / "audio"
+    headers = register_and_login(client, "correction@example.com")
+    event_id = create_event(client, "correction@example.com")
+    audio = upload(client, headers, event_id).json()
+
+    class CorrectionProvider:
+        def correct(self, transcript):
+            return "แก้ไขแล้ว: " + transcript
+
+    import app.services.processing_service as processing_service
+
+    monkeypatch.setattr(
+        processing_service,
+        "get_configured_transcript_correction_provider",
+        lambda settings: CorrectionProvider(),
+    )
+    started = client.post(f"/api/v1/processing/audio/{audio['id']}", headers=headers)
+    result = client.get(
+        f"/api/v1/processing/{started.json()['id']}/result",
+        headers=headers,
+    )
+
+    assert result.status_code == 200
+    assert result.json()["status"] == "completed"
+    assert result.json()["raw_transcript"] == "Test transcript for sample.mp3"
+    assert result.json()["corrected_transcript"] == (
+        "แก้ไขแล้ว: Test transcript for sample.mp3"
+    )
+    assert result.json()["transcript_text"] == result.json()["corrected_transcript"]
+
+
+def test_correction_failure_keeps_completed_job_and_raw_transcript(
+    client,
+    tmp_path,
+    monkeypatch,
+):
+    storage.root = tmp_path / "audio"
+    headers = register_and_login(client, "correction-failure@example.com")
+    event_id = create_event(client, "correction-failure@example.com")
+    audio = upload(client, headers, event_id).json()
+
+    class FailingCorrectionProvider:
+        def correct(self, transcript):
+            raise TimeoutError("Ollama timed out")
+
+    import app.services.processing_service as processing_service
+
+    monkeypatch.setattr(
+        processing_service,
+        "get_configured_transcript_correction_provider",
+        lambda settings: FailingCorrectionProvider(),
+    )
+    started = client.post(f"/api/v1/processing/audio/{audio['id']}", headers=headers)
+    result = client.get(
+        f"/api/v1/processing/{started.json()['id']}/result",
+        headers=headers,
+    )
+
+    assert result.status_code == 200
+    assert result.json()["status"] == "completed"
+    assert result.json()["raw_transcript"] == "Test transcript for sample.mp3"
+    assert result.json()["corrected_transcript"] is None
+    assert result.json()["transcript_text"] == result.json()["raw_transcript"]
+
+
+def test_summary_generation_is_idempotent(client, tmp_path):
     storage.root = tmp_path / "audio"
     headers = register_and_login(client, "summary-generation@example.com")
     event_id = create_event(client, "summary-generation@example.com")
@@ -129,8 +199,8 @@ def test_summary_generation_is_disabled_in_stt_only_mode(client, tmp_path):
 
     response = client.post(f"/api/v1/processing/{job_id}/summary", headers=headers)
 
-    assert response.status_code == 409
-    assert "disabled" in response.json()["detail"]
+    assert response.status_code == 200
+    assert response.json()["summary"] == "Test summary: Test transcript for sample.mp3"
 
 
 def test_summary_generation_requires_transcription_and_ownership(client, tmp_path):
@@ -160,7 +230,7 @@ def test_summary_generation_requires_transcription_and_ownership(client, tmp_pat
     ).status_code == 409
 
 
-def test_summary_generation_remains_disabled_for_empty_transcripts(client, tmp_path):
+def test_summary_generation_rejects_empty_transcripts(client, tmp_path):
     storage.root = tmp_path / "audio"
     headers = register_and_login(client, "empty-transcript@example.com")
     event_id = create_event(client, "empty-transcript@example.com")
@@ -180,8 +250,8 @@ def test_summary_generation_remains_disabled_for_empty_transcripts(client, tmp_p
         f"/api/v1/processing/{job_id}/summary",
         headers=headers,
     )
-    assert response.status_code == 409
-    assert "STT-only mode" in response.json()["detail"]
+    assert response.status_code == 422
+    assert "non-empty transcript" in response.json()["detail"]
 
 
 def test_processing_prevents_duplicate_completed_job(client, tmp_path):
@@ -386,18 +456,13 @@ def test_transcript_is_retained_when_summary_fails(client, tmp_path):
             storage_service=storage,
         )
         service.run(job.id)
-        try:
-            service.generate_summary(job.id)
-        except RuntimeError as exc:
-            assert str(exc) == "summary provider unavailable"
-        else:
-            raise AssertionError("Summary generation unexpectedly succeeded")
 
         db.expire_all()
         saved_job = db.get(ProcessingJob, job.id)
         saved_audio = db.get(AudioRecord, audio.id)
-        assert saved_job.status is ProcessingStatus.COMPLETED
-        assert saved_job.error_message is None
+        assert saved_job.status is ProcessingStatus.FAILED
+        assert saved_job.processing_stage.value == "failed"
+        assert saved_job.error_message == "summary provider unavailable"
         assert saved_audio.transcript.text == "real transcript"
         assert saved_audio.transcript.language == "en"
         assert saved_audio.transcript.summary is None
@@ -453,7 +518,7 @@ def test_non_speech_completes_without_transcript_or_llm_call(client, tmp_path):
         db.expire_all()
         saved_job = db.get(ProcessingJob, job.id)
         saved_audio = db.get(AudioRecord, audio.id)
-        assert saved_job.status is ProcessingStatus.COMPLETED
+        assert saved_job.status is ProcessingStatus.FAILED
         assert saved_job.transcription_status is TranscriptionStatus.NO_SPEECH
         assert saved_audio.transcript is None
     finally:

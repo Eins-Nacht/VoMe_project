@@ -120,82 +120,99 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: const Text('Transcript Detail'),
-      leading: BackButton(onPressed: widget.onBack),
-      actions: [
-        IconButton(
-          onPressed: _summary.transcriptText?.isNotEmpty == true
-              ? () async {
-                  await Clipboard.setData(
-                    ClipboardData(text: _summary.transcriptText!),
-                  );
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Transcript copied.')),
-                    );
+  Widget build(BuildContext context) {
+    final transcript =
+        _summary.correctedTranscript ??
+        _summary.rawTranscript ??
+        _summary.transcriptText;
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Transcript Detail'),
+        leading: BackButton(onPressed: widget.onBack),
+        actions: [
+          IconButton(
+            onPressed: transcript?.isNotEmpty == true
+                ? () async {
+                    await Clipboard.setData(ClipboardData(text: transcript!));
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Transcript copied.')),
+                      );
+                    }
                   }
-                }
-              : null,
-          tooltip: 'Copy transcript',
-          icon: const Icon(Icons.copy),
-        ),
-      ],
-    ),
-    body: ListView(
-      padding: const EdgeInsets.all(24),
-      children: [
-        Text(
-          _summary.eventTitle,
-          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          _summary.audioFilename,
-          style: const TextStyle(color: Colors.grey),
-        ),
-        const SizedBox(height: 16),
-        FilledButton.icon(
-          onPressed: _audioRetained ? _play : null,
-          icon: Icon(_playing ? Icons.pause : Icons.play_arrow),
-          label: const Text('Play audio'),
-        ),
-        const SizedBox(height: 20),
-        Text(
-          _audioRetained
-              ? 'Original audio is retained on this device.'
-              : 'Original audio is not retained on this device.',
-          style: const TextStyle(color: Colors.grey),
-        ),
-        if (_audioRetained)
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton(
-              onPressed: _deleteLocalAudio,
-              child: const Text('Delete original audio from device'),
-            ),
+                : null,
+            tooltip: 'Copy transcript',
+            icon: const Icon(Icons.copy),
           ),
-        if (!_audioRetained && _localRecording != null)
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton(
-              onPressed: _keepLocalAudio,
-              child: const Text('Keep original audio on device'),
-            ),
-          ),
-        if (_summary.transcriptText?.trim().isNotEmpty == true)
-          _section('Transcript', _summary.transcriptText!)
-        else
-          _emptySection('Transcript', 'No transcript is available.'),
-        if (_summary.transcriptLanguage != null)
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(24),
+        children: [
           Text(
-            'Detected language: ${_summary.transcriptLanguage}',
+            _summary.eventTitle,
+            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _summary.audioFilename,
             style: const TextStyle(color: Colors.grey),
           ),
-      ],
-    ),
-  );
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: _audioRetained ? _play : null,
+            icon: Icon(_playing ? Icons.pause : Icons.play_arrow),
+            label: const Text('Play audio'),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            _audioRetained
+                ? 'Original audio is retained on this device.'
+                : 'Original audio is not retained on this device.',
+            style: const TextStyle(color: Colors.grey),
+          ),
+          if (_audioRetained)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                onPressed: _deleteLocalAudio,
+                child: const Text('Delete original audio from device'),
+              ),
+            ),
+          if (!_audioRetained && _localRecording != null)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                onPressed: _keepLocalAudio,
+                child: const Text('Keep original audio on device'),
+              ),
+            ),
+          if (transcript?.trim().isNotEmpty == true)
+            _section('Transcript', transcript!)
+          else
+            _emptySection('Transcript', 'No transcript is available.'),
+          if (_summary.transcriptLanguage != null)
+            Text(
+              'Detected language: ${_summary.transcriptLanguage}',
+              style: const TextStyle(color: Colors.grey),
+            ),
+          if (_summary.summary.trim().isNotEmpty)
+            _section('AI Summary', _summary.summary),
+          if (_summary.keyPoints.isNotEmpty)
+            _listSection('Key Points', _summary.keyPoints),
+          if (_summary.actionItems.isNotEmpty)
+            _listSection('Action Items', _summary.actionItems),
+          if (_summary.keywords.isNotEmpty)
+            _listSection('Keywords', _summary.keywords),
+          if (_summary.category != null)
+            Text(
+              'Category: ${_summary.category}',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+        ],
+      ),
+    );
+  }
 
   Widget _section(String title, String value) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -216,4 +233,7 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
       const SizedBox(height: 18),
     ],
   );
+
+  Widget _listSection(String title, List<String> values) =>
+      _section(title, values.map((value) => '• $value').join('\n'));
 }

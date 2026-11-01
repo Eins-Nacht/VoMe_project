@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
-from app.models.processing_job import ProcessingStatus, TranscriptionStatus
+from app.models.processing_job import ProcessingStage, ProcessingStatus, TranscriptionStatus
 from app.schemas.audio import AudioRecordResponse
 
 
@@ -14,6 +14,7 @@ class ProcessingJobResponse(BaseModel):
     status: ProcessingStatus
     transcription_status: TranscriptionStatus | None
     error_message: str | None
+    processing_stage: ProcessingStage | None
     created_at: datetime
     updated_at: datetime
 
@@ -23,6 +24,8 @@ class ProcessingResultResponse(ProcessingJobResponse):
     event_title: str
     event_category: str | None
     transcript_text: str | None
+    raw_transcript: str | None
+    corrected_transcript: str | None
     transcript_language: str | None
     summary: str | None
     key_points: list | None

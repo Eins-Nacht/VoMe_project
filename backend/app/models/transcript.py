@@ -25,6 +25,8 @@ class Transcript(UpdatedTimestampMixin, Base):
         index=True,
     )
     text: Mapped[str] = mapped_column(Text, nullable=False)
+    raw_transcript: Mapped[str | None] = mapped_column(Text)
+    corrected_transcript: Mapped[str | None] = mapped_column(Text)
     language: Mapped[str | None] = mapped_column(String(20))
 
     audio_record: Mapped[AudioRecord] = relationship(back_populates="transcript")

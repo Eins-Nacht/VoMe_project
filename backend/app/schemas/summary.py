@@ -16,6 +16,8 @@ class SummaryResponse(BaseModel):
     event_title: str
     audio_filename: str
     transcript_text: str | None
+    raw_transcript: str | None = None
+    corrected_transcript: str | None = None
     transcript_language: str | None
     summary: str
     key_points: list[str] | None

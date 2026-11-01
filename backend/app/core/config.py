@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     llm_provider: str | None = None
     openai_api_key: str | None = None
     openai_summary_model: str = "gpt-4o-mini"
+    ollama_base_url: str = "http://127.0.0.1:11434"
+    ollama_model: str = "gemma3:latest"
+    ollama_timeout_seconds: float = 30.0
     whisper_model: str = "Systran/faster-whisper-small"
     whisper_device: str = "cpu"
     whisper_compute_type: str = "int8"

@@ -10,6 +10,7 @@ from app.models import (
     AudioRecord,
     ProcessingJob,
     ProcessingStatus,
+    ProcessingStage,
     Summary,
     Transcript,
     TranscriptionStatus,
@@ -19,6 +20,8 @@ from app.services.processing_providers import (
     LlmProvider,
     SttProvider,
     TranscriptResult,
+    TranscriptCorrectionProvider,
+    get_configured_transcript_correction_provider,
     get_configured_llm_provider,
     get_configured_stt_provider,
 )
@@ -33,6 +36,7 @@ class ProcessingService:
         *,
         stt_provider: SttProvider | None = None,
         llm_provider: LlmProvider | None = None,
+        correction_provider: TranscriptCorrectionProvider | None = None,
         storage_service: AudioStorageService | None = None,
     ) -> None:
         self.session_factory = session_factory
@@ -40,6 +44,7 @@ class ProcessingService:
             get_settings()
         )
         self.llm_provider = llm_provider
+        self.correction_provider = correction_provider
         self.storage_service = storage_service or AudioStorageService()
 
     def run(self, job_id: int) -> None:
@@ -52,6 +57,7 @@ class ProcessingService:
             if job is None or job.status != ProcessingStatus.PENDING:
                 return
             job.status = ProcessingStatus.PROCESSING
+            job.processing_stage = ProcessingStage.TRANSCRIBING
             job.transcription_status = None
             job.error_message = None
             db.commit()
@@ -70,16 +76,63 @@ class ProcessingService:
                     return
                 job.transcription_status = transcript_result.status
                 if transcript_result.status != TranscriptionStatus.SUCCESS:
-                    job.status = ProcessingStatus.COMPLETED
+                    job.status = ProcessingStatus.FAILED
+                    job.processing_stage = ProcessingStage.FAILED
                     job.error_message = transcript_result.message
                     db.commit()
                     return
                 transcript = audio.transcript or Transcript(audio_record=audio)
                 transcript.text = transcript_result.text
+                transcript.raw_transcript = transcript_result.text
+                transcript.corrected_transcript = None
                 transcript.language = transcript_result.language
                 db.add(transcript)
                 db.flush()
                 db.commit()
+                job.processing_stage = ProcessingStage.CORRECTING
+                db.commit()
+                try:
+                    correction_provider = (
+                        self.correction_provider
+                        or get_configured_transcript_correction_provider(
+                            get_settings()
+                        )
+                    )
+                    corrected = correction_provider.correct(transcript_result.text)
+                    transcript.corrected_transcript = corrected
+                    db.commit()
+                except Exception:
+                    logger.warning(
+                        "Transcript correction failed for job %s; keeping raw transcript",
+                        job_id,
+                        exc_info=True,
+                    )
+                job.processing_stage = ProcessingStage.SUMMARIZING
+                db.commit()
+                if transcript.summary is None:
+                    if self.llm_provider is None:
+                        self.llm_provider = get_configured_llm_provider(get_settings())
+                    summary_result = self.llm_provider.summarize(
+                        TranscriptResult(
+                            text=transcript.corrected_transcript
+                            or transcript.raw_transcript
+                            or transcript.text,
+                            language=transcript.language,
+                        )
+                    )
+                    db.add(
+                        Summary(
+                            transcript=transcript,
+                            summary=summary_result.summary,
+                            key_points=summary_result.key_points,
+                            action_items=summary_result.action_items,
+                            keywords=summary_result.keywords,
+                            category=summary_result.category,
+                            mood=summary_result.mood,
+                            action_status=summary_result.action_status,
+                        )
+                    )
+                    db.commit()
                 if audio_path is not None:
                     self._cleanup_temporary_audio(
                         job.audio_record_id,
@@ -88,6 +141,7 @@ class ProcessingService:
                     )
                     audio_path = None
                 job.status = ProcessingStatus.COMPLETED
+                job.processing_stage = ProcessingStage.COMPLETED
                 job.transcription_status = TranscriptionStatus.SUCCESS
                 db.commit()
             except Exception as exc:
@@ -95,6 +149,7 @@ class ProcessingService:
                 failed_job = db.get(ProcessingJob, job_id)
                 if failed_job is not None and not self._is_cancelled(db, job_id):
                     failed_job.status = ProcessingStatus.FAILED
+                    failed_job.processing_stage = ProcessingStage.FAILED
                     failed_job.transcription_status = TranscriptionStatus.FAILED
                     failed_job.error_message = str(exc)[:2000] or "Audio processing failed"
                     db.commit()
@@ -127,7 +182,11 @@ class ProcessingService:
                 self.llm_provider = get_configured_llm_provider(get_settings())
             summary_result = self.llm_provider.summarize(
                 TranscriptResult(
-                    text=transcript.text,
+                    text=(
+                        transcript.corrected_transcript
+                        or transcript.raw_transcript
+                        or transcript.text
+                    ),
                     language=transcript.language,
                 )
             )
@@ -202,6 +261,7 @@ class ProcessingService:
             job = db.get(ProcessingJob, job_id)
             if job is not None and not self._is_cancelled(db, job_id):
                 job.status = ProcessingStatus.FAILED
+                job.processing_stage = ProcessingStage.FAILED
                 job.transcription_status = TranscriptionStatus.FAILED
                 job.error_message = error_message[:2000]
                 db.commit()

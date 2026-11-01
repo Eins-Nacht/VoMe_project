@@ -28,6 +28,14 @@ class TranscriptionStatus(str, Enum):
     FAILED = "failed"
 
 
+class ProcessingStage(str, Enum):
+    TRANSCRIBING = "transcribing"
+    CORRECTING = "correcting"
+    SUMMARIZING = "summarizing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
 class ProcessingJob(UpdatedTimestampMixin, Base):
     """The persisted state of the STT-to-summary workflow for one audio record."""
 
@@ -68,5 +76,14 @@ class ProcessingJob(UpdatedTimestampMixin, Base):
         )
     )
     error_message: Mapped[str | None] = mapped_column(Text)
+    processing_stage: Mapped[ProcessingStage | None] = mapped_column(
+        SqlEnum(
+            ProcessingStage,
+            values_callable=lambda enum: [item.value for item in enum],
+            name="processing_stage",
+            native_enum=False,
+            create_constraint=False,
+        )
+    )
 
     audio_record: Mapped[AudioRecord] = relationship(back_populates="processing_job")

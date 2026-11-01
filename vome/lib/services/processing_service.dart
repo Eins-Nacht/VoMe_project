@@ -203,6 +203,7 @@ class ProcessingService {
           throw StateError('The local recording is unavailable.');
         }
         await _saveJob(recordingId, job);
+        onStage?.call(_stageLabel(job.processingStage, job.status));
         if (job.status == 'cancelled') {
           throw StateError('Processing was cancelled.');
         }
@@ -308,6 +309,15 @@ class ProcessingService {
     'failed' => 'Failed',
     'cancelled' => 'Cancelled',
     _ => 'Pending',
+  };
+
+  String _stageLabel(String? stage, String status) => switch (stage) {
+    'transcribing' => 'Transcribing audio...',
+    'correcting' => 'Correcting transcript...',
+    'summarizing' => 'Generating summary...',
+    'completed' => 'Completed.',
+    'failed' => 'Processing failed.',
+    _ => status == 'processing' ? 'Processing audio...' : 'Uploading audio...',
   };
 
   String _outcomeError(String status, String? message) =>

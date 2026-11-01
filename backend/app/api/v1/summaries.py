@@ -36,7 +36,11 @@ def _to_response(
         event_id=event.id,
         event_title=event.title,
         audio_filename=audio.filename,
-        transcript_text=transcript.text,
+        transcript_text=(
+            transcript.corrected_transcript or transcript.raw_transcript or transcript.text
+        ),
+        raw_transcript=transcript.raw_transcript or transcript.text,
+        corrected_transcript=transcript.corrected_transcript,
         transcript_language=transcript.language,
         summary=summary.summary,
         key_points=summary.key_points,

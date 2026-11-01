@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 from threading import Lock, RLock
 from typing import Protocol
+import requests
 
 from app.models import ActionStatus, Mood, TranscriptionStatus
 
@@ -37,6 +38,123 @@ class SttProvider(Protocol):
 class LlmProvider(Protocol):
     def summarize(self, transcript: TranscriptResult) -> SummaryResult:
         ...
+
+
+class TranscriptCorrectionProvider(Protocol):
+    def correct(self, transcript: str) -> str:
+        ...
+
+
+class OllamaTranscriptCorrectionProvider:
+    _system_prompt = (
+        "You correct transcripts written in Thai. Correct spelling, Thai "
+        "speech-to-text errors, punctuation, spacing, and sentence readability. "
+        "Preserve the original meaning, technical terms, names, and every piece "
+        "of information. Do not summarize, shorten, translate, or invent content. "
+        "Return only the corrected transcript text."
+    )
+
+    def __init__(
+        self,
+        base_url: str,
+        model_name: str,
+        timeout_seconds: float = 30.0,
+    ) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.model_name = model_name
+        self.timeout_seconds = timeout_seconds
+
+    def correct(self, transcript: str) -> str:
+        response = requests.post(
+            f"{self.base_url}/api/chat",
+            json={
+                "model": self.model_name,
+                "messages": [
+                    {"role": "system", "content": self._system_prompt},
+                    {"role": "user", "content": transcript},
+                ],
+                "stream": False,
+            },
+            timeout=self.timeout_seconds,
+        )
+        response.raise_for_status()
+        content = response.json().get("message", {}).get("content")
+        if not isinstance(content, str) or not content.strip():
+            raise RuntimeError("Ollama returned an empty transcript correction")
+        return content.strip()
+
+
+class OllamaLlmProvider:
+    _system_prompt = (
+        "Create a faithful structured summary of the Thai transcript. Do not "
+        "invent facts or omit important information. Return JSON only with "
+        "summary, key_points, action_items, keywords, category, mood, and "
+        "action_status. Use empty arrays when there are no items. mood must be "
+        "Positive, Neutral, or Negative. action_status must be Pending, "
+        "Completed, or No Action."
+    )
+
+    def __init__(
+        self,
+        base_url: str,
+        model_name: str,
+        timeout_seconds: float = 30.0,
+    ) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.model_name = model_name
+        self.timeout_seconds = timeout_seconds
+
+    def summarize(self, transcript: TranscriptResult) -> SummaryResult:
+        response = requests.post(
+            f"{self.base_url}/api/chat",
+            json={
+                "model": self.model_name,
+                "messages": [
+                    {"role": "system", "content": self._system_prompt},
+                    {"role": "user", "content": transcript.text or ""},
+                ],
+                "format": "json",
+                "stream": False,
+            },
+            timeout=self.timeout_seconds,
+        )
+        response.raise_for_status()
+        try:
+            data = json.loads(response.json()["message"]["content"])
+            summary = self._required_text(data, "summary")
+            key_points = self._string_list(data, "key_points")
+            action_items = self._string_list(data, "action_items")
+            keywords = self._string_list(data, "keywords")
+            category = self._required_text(data, "category")
+            mood = Mood(data["mood"])
+            action_status = ActionStatus(data["action_status"])
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise RuntimeError("Ollama returned an invalid summary") from exc
+        return SummaryResult(
+            summary=summary,
+            key_points=key_points,
+            action_items=action_items,
+            keywords=keywords,
+            category=category,
+            mood=mood,
+            action_status=action_status,
+        )
+
+    @staticmethod
+    def _required_text(data: dict, key: str) -> str:
+        value = data.get(key)
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{key} must be a non-empty string")
+        return value.strip()
+
+    @staticmethod
+    def _string_list(data: dict, key: str) -> list[str]:
+        value = data.get(key)
+        if not isinstance(value, list) or any(
+            not isinstance(item, str) or not item.strip() for item in value
+        ):
+            raise ValueError(f"{key} must be a list of non-empty strings")
+        return [item.strip() for item in value]
 
 
 class WhisperSttProvider:
@@ -273,10 +391,39 @@ def get_configured_stt_provider(settings) -> SttProvider:
     return provider
 
 
+def get_configured_transcript_correction_provider(
+    settings,
+) -> TranscriptCorrectionProvider:
+    return OllamaTranscriptCorrectionProvider(
+        base_url=settings.ollama_base_url,
+        model_name=settings.ollama_model,
+        timeout_seconds=settings.ollama_timeout_seconds,
+    )
+
+
 def get_configured_llm_provider(settings) -> LlmProvider:
     llm_name = settings.llm_provider
     if llm_name is None:
         raise RuntimeError("LLM_PROVIDER must be configured for summary generation")
+    if llm_name == "ollama":
+        key = (
+            llm_name,
+            settings.ollama_base_url,
+            settings.ollama_model,
+            settings.ollama_timeout_seconds,
+        )
+        provider = _llm_provider_cache.get(key)
+        if provider is None:
+            with _provider_cache_lock:
+                provider = _llm_provider_cache.get(key)
+                if provider is None:
+                    provider = OllamaLlmProvider(
+                        settings.ollama_base_url,
+                        settings.ollama_model,
+                        settings.ollama_timeout_seconds,
+                    )
+                    _llm_provider_cache[key] = provider
+        return provider
     if llm_name != "openai":
         raise RuntimeError(f"Unsupported LLM_PROVIDER: {llm_name}")
     if not settings.openai_api_key:
