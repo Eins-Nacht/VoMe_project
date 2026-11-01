@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 
 import '../services/audio_api_service.dart';
 import '../services/remote_summary_service.dart';
-import '../services/recording_repository.dart';
 import '../models/recording.dart';
 import '../widgets/processing_status_card.dart';
 
@@ -98,44 +97,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
   }
 
-  Future<void> _delete(RemoteSummary item) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete summary?'),
-        content: Text('Delete the summary for "${item.eventTitle}"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    try {
-      await RemoteSummaryService.instance.api!.deleteSummary(item.id);
-      await RecordingRepository.instance.deleteByClientRecordingId(
-        item.clientRecordingId,
-      );
-      if (item.clientRecordingId == null) {
-        await RecordingRepository.instance.deleteByAudioFilename(
-          item.audioFilename,
-        );
-      }
-      await _load();
-    } catch (error) {
-      if (mounted)
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('$error')));
-    }
-  }
-
   @override
   void dispose() {
     _search.dispose();
@@ -151,11 +112,27 @@ class _HistoryScreenState extends State<HistoryScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(24, 20, 24, 14),
-              child: Text(
-                'History',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+            Container(
+              margin: const EdgeInsets.fromLTRB(20, 16, 20, 14),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF4F8FF),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFFE0EBFF)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(
+                    Icons.history_rounded,
+                    size: 22,
+                    color: Color(0xFF4C7FF0),
+                  ),
+                  SizedBox(width: 10),
+                  Text(
+                    'History',
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+                  ),
+                ],
               ),
             ),
             Padding(
@@ -165,6 +142,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 onSubmitted: (_) => _load(),
                 decoration: InputDecoration(
                   hintText: 'Search summaries...',
+                  filled: true,
+                  fillColor: const Color(0xFFF9FBFF),
                   prefixIcon: const Icon(Icons.search),
                   suffixIcon: IconButton(
                     icon: const Icon(Icons.refresh),
@@ -172,6 +151,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Color(0xFFDCE8FF)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(
+                      color: Color(0xFF8DAFFF),
+                      width: 1.5,
+                    ),
                   ),
                 ),
               ),
@@ -258,38 +248,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   ],
                 ),
               ),
-            if (widget.completedRecordings.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Transcripts',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    ...widget.completedRecordings.map(
-                      (recording) => Card(
-                        child: ListTile(
-                          onTap: () => widget.onRecordingTap?.call(recording),
-                          title: Text(recording.title),
-                          subtitle: Text(
-                            recording.transcript?.trim().isNotEmpty == true
-                                ? recording.transcript!
-                                : 'No transcript text',
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          trailing: const Icon(Icons.chevron_right),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
             Expanded(
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
@@ -312,21 +270,27 @@ class _HistoryScreenState extends State<HistoryScreen> {
                           }
                           final item = _items[index];
                           return Card(
+                            elevation: 0,
+                            color: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              side: const BorderSide(color: Color(0xFFE4EDFF)),
+                            ),
                             child: ListTile(
                               onTap: () => widget.onSummaryTap?.call(item),
-                              title: Text(item.eventTitle),
+                              title: Text(
+                                item.eventTitle,
+                                style: const TextStyle(
+                                  color: Color(0xFF376FD9),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                               subtitle: Text(
                                 item.summary,
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                               ),
-                              trailing: IconButton(
-                                icon: const Icon(
-                                  Icons.delete_outline,
-                                  color: Colors.redAccent,
-                                ),
-                                onPressed: () => _delete(item),
-                              ),
+                              trailing: const Icon(Icons.chevron_right),
                             ),
                           );
                         },
@@ -355,6 +319,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
       child: ChoiceChip(
         label: Text(label),
         selected: selected,
+        selectedColor: const Color(0xFFEAF2FF),
+        labelStyle: TextStyle(
+          color: selected ? const Color(0xFF376FD9) : const Color(0xFF526071),
+          fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+        ),
+        side: BorderSide(
+          color: selected ? const Color(0xFFBFD4FF) : const Color(0xFFE5EAF2),
+        ),
         onSelected: (_) => onTap(value),
       ),
     );

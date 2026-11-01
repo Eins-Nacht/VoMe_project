@@ -112,7 +112,10 @@ class DatabaseService {
 
   Future<int> countRecordingsSince(DateTime since) async {
     final result = await _database.rawQuery(
-      'SELECT COUNT(*) as count FROM recordings WHERE created_at >= ?',
+      'SELECT COUNT(*) as count FROM recordings '
+      'WHERE created_at >= ? '
+      "AND status = 'Completed' "
+      "AND transcript IS NOT NULL AND TRIM(transcript) <> ''",
       [since.millisecondsSinceEpoch],
     );
     return Sqflite.firstIntValue(result) ?? 0;
@@ -121,7 +124,9 @@ class DatabaseService {
   Future<int> sumDurationSince(DateTime since) async {
     final result = await _database.rawQuery(
       'SELECT COALESCE(SUM(duration_ms), 0) as total '
-      'FROM recordings WHERE created_at >= ? AND audio_retained = 1',
+      'FROM recordings '
+      "WHERE created_at >= ? AND audio_retained = 1 AND status = 'Completed' "
+      "AND transcript IS NOT NULL AND TRIM(transcript) <> ''",
       [since.millisecondsSinceEpoch],
     );
     return Sqflite.firstIntValue(result) ?? 0;

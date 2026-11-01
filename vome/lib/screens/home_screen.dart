@@ -5,8 +5,6 @@ import '../services/audio_api_service.dart';
 import '../widgets/processing_status_card.dart';
 
 class HomeScreen extends StatelessWidget {
-  static const _legacyRecordingDisplayOffset = 7;
-
   final int recordingsThisWeek;
   final Duration totalRecordingTime;
   final String? localStatsLoadError;
@@ -78,10 +76,7 @@ class HomeScreen extends StatelessWidget {
                                 Expanded(
                                   child: _StatCard(
                                     value: localStatsLoadError == null
-                                        ? (recordingsThisWeek -
-                                                  _legacyRecordingDisplayOffset)
-                                              .clamp(0, recordingsThisWeek)
-                                              .toString()
+                                        ? recordingsThisWeek.toString()
                                         : '—',
                                     label: 'local recordings',
                                     footer: localStatsLoadError == null

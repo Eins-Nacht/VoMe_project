@@ -243,10 +243,20 @@ class _AppRootState extends State<AppRoot> with WidgetsBindingObserver {
   }
 
   void _onNavigationTap(int index) {
-    setState(() => _navIndex = index);
     if (index == 0) {
+      setState(() {
+        _navIndex = 0;
+        _screen = _AppScreen.home;
+        _selectedSummary = null;
+        _selectedRecording = null;
+      });
       _refreshData();
+      return;
     }
+    setState(() {
+      _navIndex = index;
+      _screen = _AppScreen.home;
+    });
   }
 
   Future<void> _signOut() async {

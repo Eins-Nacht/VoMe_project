@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../models/recording.dart';
 import '../services/audio_api_service.dart';
+import '../services/remote_summary_service.dart';
 import '../services/recording_repository.dart';
 
 class RecordingDetailScreen extends StatefulWidget {
@@ -99,6 +100,37 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
     }
   }
 
+  Future<void> _deleteSummary() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete summary?'),
+        content: Text('Delete the summary for "${_summary.eventTitle}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await RemoteSummaryService.instance.api!.deleteSummary(_summary.id);
+      widget.onDeleted?.call();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$error')));
+      }
+    }
+  }
+
   Future<void> _keepLocalAudio() async {
     final recording = _localRecording;
     if (recording == null || _audioRetained) return;
@@ -130,6 +162,11 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
         title: const Text('Transcript Detail'),
         leading: BackButton(onPressed: widget.onBack),
         actions: [
+          IconButton(
+            onPressed: _deleteSummary,
+            tooltip: 'Delete summary',
+            icon: const Icon(Icons.delete_outline),
+          ),
           IconButton(
             onPressed: transcript?.isNotEmpty == true
                 ? () async {

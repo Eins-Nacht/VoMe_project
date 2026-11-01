@@ -84,6 +84,8 @@ Future<void> _insertRecording({
       mimeType: 'audio/mp4',
       source: source,
       audioRetained: audioRetained,
+      status: 'Completed',
+      transcript: 'Completed transcript',
     ),
   );
 }
