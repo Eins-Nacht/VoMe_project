@@ -151,6 +151,8 @@ def get_processing_result(
         created_at=job.created_at,
         updated_at=job.updated_at,
         audio=audio_response(job.audio_record),
+        event_title=job.audio_record.event.title,
+        event_category=job.audio_record.event.category,
         transcript_text=transcript.text if transcript else None,
         transcript_language=transcript.language if transcript else None,
         summary=summary.summary if summary else None,

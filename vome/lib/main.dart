@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'models/recording.dart';
@@ -5,6 +7,7 @@ import 'services/audio_api_service.dart';
 import 'screens/history_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/processing_status_screen.dart';
 import 'screens/recording_detail_screen.dart';
 import 'screens/recording_screen.dart';
 import 'screens/upload_screen.dart';
@@ -13,12 +16,14 @@ import 'services/auth_service.dart';
 import 'services/database_service.dart';
 import 'services/recording_repository.dart';
 import 'services/remote_summary_service.dart';
+import 'services/processing_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await DatabaseService.instance.init();
   await AudioStorageService.instance.init();
   await AuthService.instance.restoreSession();
+  await ProcessingService.instance.resumePendingJobs();
   runApp(const AudiaryApp());
 }
 
@@ -58,7 +63,7 @@ class AudiaryScope extends InheritedWidget {
   bool updateShouldNotify(AudiaryScope oldWidget) => false;
 }
 
-enum _AppScreen { login, home, recording, detail }
+enum _AppScreen { login, home, recording, processing, detail }
 
 class AppRoot extends StatefulWidget {
   const AppRoot({super.key});
@@ -67,36 +72,54 @@ class AppRoot extends StatefulWidget {
   State<AppRoot> createState() => _AppRootState();
 }
 
-class _AppRootState extends State<AppRoot> {
+class _AppRootState extends State<AppRoot> with WidgetsBindingObserver {
   _AppScreen _screen = _AppScreen.login;
 
   int _navIndex = 0;
   int _recordingsThisWeek = 0;
   Duration _totalRecordingTime = Duration.zero;
-  List<Recording> _recentRecordings = [];
+  List<Recording> _allRecordings = [];
   List<RemoteSummary> _recentSummaries = [];
   String? _summaryLoadError;
+  String? _localStatsLoadError;
   RemoteSummary? _selectedSummary;
   Key _historyRefreshKey = UniqueKey();
+  int _dashboardLoadGeneration = 0;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     if (AuthService.instance.isAuthenticated) {
       _screen = _AppScreen.home;
     }
     _loadDashboardData();
   }
 
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed &&
+        AuthService.instance.isAuthenticated) {
+      _refreshData();
+      unawaited(ProcessingService.instance.resumePendingJobs());
+    }
+  }
+
   Future<void> _loadDashboardData() async {
+    final generation = ++_dashboardLoadGeneration;
     try {
       final count = await RecordingRepository.instance
           .countRecordingsThisWeek();
       final totalDuration = await RecordingRepository.instance
           .totalDurationThisWeek();
-      final recent = await RecordingRepository.instance.getRecentRecordings(
-        limit: 10,
-      );
+      final allRecordings = await RecordingRepository.instance
+          .getAllRecordings();
       List<RemoteSummary> summaries = [];
       String? summaryError;
       final api = RemoteSummaryService.instance.api;
@@ -108,22 +131,25 @@ class _AppRootState extends State<AppRoot> {
         }
       }
 
-      if (mounted) {
+      if (mounted && generation == _dashboardLoadGeneration) {
         setState(() {
           _recordingsThisWeek = count;
           _totalRecordingTime = totalDuration;
-          _recentRecordings = recent;
+          _allRecordings = allRecordings;
+          _localStatsLoadError = null;
           _recentSummaries = summaries;
           _summaryLoadError = summaryError;
         });
       }
-    } catch (_) {
-      // Local storage can be unavailable in the first frame or a new platform.
+    } catch (error) {
+      if (mounted && generation == _dashboardLoadGeneration) {
+        setState(() => _localStatsLoadError = error.toString());
+      }
     }
   }
 
   void _refreshData() {
-    _loadDashboardData();
+    unawaited(_loadDashboardData());
     setState(() {
       _historyRefreshKey = UniqueKey();
     });
@@ -140,12 +166,48 @@ class _AppRootState extends State<AppRoot> {
     setState(() => _screen = _AppScreen.recording);
   }
 
+  void _openProcessingStatus() {
+    setState(() => _screen = _AppScreen.processing);
+  }
+
+  List<Recording> get _processingRecordings => _allRecordings
+      .where((recording) => recording.processingJobId != null)
+      .toList();
+
+  List<Recording> get _activeProcessingRecordings => _processingRecordings
+      .where((recording) => recording.status != 'Completed')
+      .toList();
+
+  Future<void> _retryProcessing(Recording recording) async {
+    await ProcessingService.instance.retry(recording);
+    _refreshData();
+  }
+
+  Future<void> _openCompletedProcessing(Recording recording) async {
+    try {
+      final summary = await ProcessingService.instance.fetchResult(recording);
+      if (summary != null && mounted) {
+        _openRecordingDetail(summary);
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$error')));
+      }
+    }
+  }
+
   void _closeRecording() {
     setState(() => _screen = _AppScreen.home);
+    _refreshData();
   }
 
   void _onNavigationTap(int index) {
     setState(() => _navIndex = index);
+    if (index == 0) {
+      _refreshData();
+    }
   }
 
   Future<void> _signOut() async {
@@ -193,6 +255,18 @@ class _AppRootState extends State<AppRoot> {
           onBack: _closeRecording,
           onRecordingComplete: _onRecordingComplete,
         ),
+        _AppScreen.processing => ProcessingStatusScreen(
+          recordings: _processingRecordings,
+          onRefresh: () async {
+            _refreshData();
+          },
+          onBack: () {
+            setState(() => _screen = _AppScreen.home);
+            _refreshData();
+          },
+          onRetry: _retryProcessing,
+          onCompletedTap: _openCompletedProcessing,
+        ),
         _AppScreen.detail when _selectedSummary != null =>
           RecordingDetailScreen(
             summary: _selectedSummary!,
@@ -209,6 +283,9 @@ class _AppRootState extends State<AppRoot> {
             onUploadTap: () => _onNavigationTap(2),
             onProfileTap: () => _onNavigationTap(3),
             onSummaryTap: _openRecordingDetail,
+            processingRecordings: _activeProcessingRecordings,
+            onProcessingTap: (_) => _openProcessingStatus(),
+            onRetryProcessing: _retryProcessing,
           ),
           2 => UploadScreen(
             onHomeTap: () => _onNavigationTap(0),
@@ -225,33 +302,24 @@ class _AppRootState extends State<AppRoot> {
           _ => HomeScreen(
             recordingsThisWeek: _recordingsThisWeek,
             totalRecordingTime: _totalRecordingTime,
+            localStatsLoadError: _localStatsLoadError,
             recentSummaries: _recentSummaries,
-            processingRecordings: _recentRecordings
-                .where(
-                  (recording) =>
-                      recording.status != 'Completed' &&
-                      recording.status != 'Failed',
-                )
-                .toList(),
             summaryLoadError: _summaryLoadError,
             currentIndex: _navIndex,
             onNewRecording: _openRecording,
             onSeeAll: () => _onNavigationTap(1),
             onSummaryTap: _openRecordingDetail,
+            processingRecordings: _activeProcessingRecordings,
+            onProcessingTap: (_) => _openProcessingStatus(),
+            onRetryProcessing: _retryProcessing,
             onNavigationTap: _onNavigationTap,
           ),
         },
         _ => HomeScreen(
           recordingsThisWeek: _recordingsThisWeek,
           totalRecordingTime: _totalRecordingTime,
+          localStatsLoadError: _localStatsLoadError,
           recentSummaries: _recentSummaries,
-          processingRecordings: _recentRecordings
-              .where(
-                (recording) =>
-                    recording.status != 'Completed' &&
-                    recording.status != 'Failed',
-              )
-              .toList(),
           summaryLoadError: _summaryLoadError,
           currentIndex: _navIndex,
           onNewRecording: _openRecording,

@@ -19,6 +19,8 @@ class ProcessingJobResponse(BaseModel):
 
 class ProcessingResultResponse(ProcessingJobResponse):
     audio: AudioRecordResponse
+    event_title: str
+    event_category: str | None
     transcript_text: str | None
     transcript_language: str | None
     summary: str | None

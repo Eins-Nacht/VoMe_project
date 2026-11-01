@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../services/audio_api_service.dart';
 import '../services/remote_summary_service.dart';
+import '../services/recording_repository.dart';
 
 class RecordingDetailScreen extends StatefulWidget {
   final RemoteSummary summary;
@@ -123,6 +124,14 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
     setState(() => _deleting = true);
     try {
       await RemoteSummaryService.instance.api!.deleteSummary(_summary.id);
+      await RecordingRepository.instance.deleteByClientRecordingId(
+        _summary.clientRecordingId,
+      );
+      if (_summary.clientRecordingId == null) {
+        await RecordingRepository.instance.deleteByAudioFilename(
+          _summary.audioFilename,
+        );
+      }
       widget.onDeleted?.call();
       widget.onBack?.call();
     } catch (error) {

@@ -35,6 +35,9 @@ class AudioRecord(UpdatedTimestampMixin, Base):
     format: Mapped[str] = mapped_column(String(20), nullable=False)
     size: Mapped[int] = mapped_column(Integer, nullable=False)
     duration: Mapped[float | None] = mapped_column(Float)
+    client_recording_id: Mapped[str | None] = mapped_column(
+        String(36), index=True
+    )
 
     event: Mapped[Event] = relationship(back_populates="audio_records")
     transcript: Mapped[Transcript | None] = relationship(

@@ -32,6 +32,7 @@ def _to_response(
         id=summary.id,
         transcript_id=summary.transcript_id,
         audio_record_id=audio.id,
+        client_recording_id=audio.client_recording_id,
         event_id=event.id,
         event_title=event.title,
         audio_filename=audio.filename,

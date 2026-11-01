@@ -46,11 +46,19 @@ class DatabaseService {
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
-          await db.execute('ALTER TABLE recordings ADD COLUMN processing_job_id TEXT');
+          await db.execute(
+            'ALTER TABLE recordings ADD COLUMN processing_job_id TEXT',
+          );
           await db.execute('ALTER TABLE recordings ADD COLUMN transcript TEXT');
-          await db.execute('ALTER TABLE recordings ADD COLUMN summary_json TEXT');
-          await db.execute('ALTER TABLE recordings ADD COLUMN processing_error TEXT');
-          await db.execute('ALTER TABLE recordings ADD COLUMN audio_retained INTEGER NOT NULL DEFAULT 1');
+          await db.execute(
+            'ALTER TABLE recordings ADD COLUMN summary_json TEXT',
+          );
+          await db.execute(
+            'ALTER TABLE recordings ADD COLUMN processing_error TEXT',
+          );
+          await db.execute(
+            'ALTER TABLE recordings ADD COLUMN audio_retained INTEGER NOT NULL DEFAULT 1',
+          );
         }
       },
     );
@@ -112,7 +120,8 @@ class DatabaseService {
 
   Future<int> sumDurationSince(DateTime since) async {
     final result = await _database.rawQuery(
-      'SELECT COALESCE(SUM(duration_ms), 0) as total FROM recordings WHERE created_at >= ?',
+      'SELECT COALESCE(SUM(duration_ms), 0) as total '
+      'FROM recordings WHERE created_at >= ? AND audio_retained = 1',
       [since.millisecondsSinceEpoch],
     );
     return Sqflite.firstIntValue(result) ?? 0;
@@ -127,14 +136,15 @@ class DatabaseService {
   }
 
   Future<void> deleteRecording(String id) async {
-    await _database.delete(
-      'recordings',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    await _database.delete('recordings', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<void> updateRecording(String id, Map<String, Object?> values) async {
-    await _database.update('recordings', values, where: 'id = ?', whereArgs: [id]);
+    await _database.update(
+      'recordings',
+      values,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 }

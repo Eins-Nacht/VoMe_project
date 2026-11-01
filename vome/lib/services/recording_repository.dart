@@ -20,7 +20,8 @@ class RecordingRepository {
     bool audioRetained = true,
   }) async {
     final prefix = _eventTypePrefix(eventType);
-    final sequence = await DatabaseService.instance.countRecordingsWithPrefix(prefix) + 1;
+    final sequence =
+        await DatabaseService.instance.countRecordingsWithPrefix(prefix) + 1;
 
     final audioPath = await AudioStorageService.instance.saveRecordedFile(
       tempFilePath: tempFilePath,
@@ -56,7 +57,8 @@ class RecordingRepository {
     bool audioRetained = true,
   }) async {
     final prefix = _eventTypePrefix(eventType);
-    final sequence = await DatabaseService.instance.countRecordingsWithPrefix(prefix) + 1;
+    final sequence =
+        await DatabaseService.instance.countRecordingsWithPrefix(prefix) + 1;
 
     final audioPath = await AudioStorageService.instance.saveUploadedFile(
       sourcePath: sourcePath,
@@ -109,6 +111,23 @@ class RecordingRepository {
     await DatabaseService.instance.deleteRecording(id);
   }
 
+  Future<void> deleteByClientRecordingId(String? id) async {
+    if (id == null) {
+      return;
+    }
+    await deleteRecording(id);
+  }
+
+  Future<void> deleteByAudioFilename(String filename) async {
+    final target = p.basename(filename);
+    final recordings = await getAllRecordings();
+    for (final recording in recordings) {
+      if (p.basename(recording.audioPath) == target) {
+        await deleteRecording(recording.id);
+      }
+    }
+  }
+
   Future<void> updateProcessing(
     String id, {
     required String status,
@@ -144,14 +163,22 @@ class RecordingRepository {
   Future<int> countRecordingsThisWeek() {
     final now = DateTime.now();
     final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
-    final weekStart = DateTime(startOfWeek.year, startOfWeek.month, startOfWeek.day);
+    final weekStart = DateTime(
+      startOfWeek.year,
+      startOfWeek.month,
+      startOfWeek.day,
+    );
     return DatabaseService.instance.countRecordingsSince(weekStart);
   }
 
   Future<Duration> totalDurationThisWeek() async {
     final now = DateTime.now();
     final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
-    final weekStart = DateTime(startOfWeek.year, startOfWeek.month, startOfWeek.day);
+    final weekStart = DateTime(
+      startOfWeek.year,
+      startOfWeek.month,
+      startOfWeek.day,
+    );
     final totalMs = await DatabaseService.instance.sumDurationSince(weekStart);
     return Duration(milliseconds: totalMs);
   }

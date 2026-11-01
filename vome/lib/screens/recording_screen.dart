@@ -5,8 +5,7 @@ import 'package:flutter/material.dart';
 import '../models/recording.dart';
 import '../services/microphone_service.dart';
 import '../services/recording_repository.dart';
-import '../services/backend_recording_service.dart';
-import '../services/audio_storage_service.dart';
+import '../services/processing_service.dart';
 
 class RecordingScreen extends StatefulWidget {
   final VoidCallback? onBack;
@@ -118,15 +117,8 @@ class _RecordingScreenState extends State<RecordingScreen> {
         eventType: _selectedEventType,
         duration: _recordingDuration,
       );
-      await BackendRecordingService.instance.uploadAndProcess(
-        title: _titleController.text.trim().isEmpty
-            ? 'Untitled Recording'
-            : _titleController.text.trim(),
-        category: _selectedEventType,
-        filePath: AudioStorageService.instance.absolutePath(
-          recording.audioPath,
-        ),
-      );
+      widget.onRecordingComplete?.call(recording);
+      final processing = await ProcessingService.instance.enqueue(recording);
 
       if (!mounted) {
         return;
@@ -138,7 +130,11 @@ class _RecordingScreenState extends State<RecordingScreen> {
         _isSaving = false;
       });
 
-      widget.onRecordingComplete?.call(recording);
+      if (!processing.succeeded && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Recording saved. ${processing.error}')),
+        );
+      }
     } catch (e) {
       if (!mounted) {
         return;

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../models/recording.dart';
 import '../services/recording_repository.dart';
-import '../services/backend_recording_service.dart';
+import '../services/processing_service.dart';
 
 class UploadScreen extends StatefulWidget {
   final VoidCallback? onHomeTap;
@@ -237,11 +237,8 @@ class _UploadScreenState extends State<UploadScreen> {
         eventType: eventType,
         duration: Duration.zero,
       );
-      await BackendRecordingService.instance.uploadAndProcess(
-        title: title,
-        category: eventType,
-        filePath: file.path!,
-      );
+      widget.onUploadComplete?.call(recording);
+      final processing = await ProcessingService.instance.enqueue(recording);
 
       if (!mounted) {
         return;
@@ -254,10 +251,14 @@ class _UploadScreenState extends State<UploadScreen> {
         _isSaving = false;
       });
 
-      widget.onUploadComplete?.call(recording);
-
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Saved to ${recording.audioPath}')),
+        SnackBar(
+          content: Text(
+            processing.succeeded
+                ? 'Saved to ${recording.audioPath}'
+                : 'Audio saved. ${processing.error}',
+          ),
+        ),
       );
     } catch (e) {
       if (!mounted) {

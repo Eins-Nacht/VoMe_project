@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 
 import '../services/audio_api_service.dart';
 import '../services/remote_summary_service.dart';
+import '../services/recording_repository.dart';
+import '../models/recording.dart';
+import '../widgets/processing_status_card.dart';
 
 class HistoryScreen extends StatefulWidget {
   final VoidCallback? onHomeTap;
@@ -13,6 +16,9 @@ class HistoryScreen extends StatefulWidget {
   final void Function(RemoteSummary summary)? onSummaryTap;
   final int currentIndex;
   final Key? refreshKey;
+  final List<Recording> processingRecordings;
+  final void Function(Recording recording)? onProcessingTap;
+  final Future<void> Function(Recording recording)? onRetryProcessing;
 
   const HistoryScreen({
     super.key,
@@ -23,6 +29,9 @@ class HistoryScreen extends StatefulWidget {
     this.onSummaryTap,
     this.currentIndex = 1,
     this.refreshKey,
+    this.processingRecordings = const [],
+    this.onProcessingTap,
+    this.onRetryProcessing,
   });
 
   @override
@@ -104,6 +113,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
     if (confirmed != true) return;
     try {
       await RemoteSummaryService.instance.api!.deleteSummary(item.id);
+      await RecordingRepository.instance.deleteByClientRecordingId(
+        item.clientRecordingId,
+      );
+      if (item.clientRecordingId == null) {
+        await RecordingRepository.instance.deleteByAudioFilename(
+          item.audioFilename,
+        );
+      }
       await _load();
     } catch (error) {
       if (mounted)
@@ -203,6 +220,35 @@ class _HistoryScreenState extends State<HistoryScreen> {
               ),
             ),
             const SizedBox(height: 10),
+            if (widget.processingRecordings.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Processing',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ...widget.processingRecordings
+                        .take(3)
+                        .map(
+                          (recording) => ProcessingStatusCard(
+                            recording: recording,
+                            onTap: () =>
+                                widget.onProcessingTap?.call(recording),
+                            onRetry: widget.onRetryProcessing == null
+                                ? null
+                                : () => widget.onRetryProcessing!(recording),
+                          ),
+                        ),
+                  ],
+                ),
+              ),
             Expanded(
               child: _loading
                   ? const Center(child: CircularProgressIndicator())

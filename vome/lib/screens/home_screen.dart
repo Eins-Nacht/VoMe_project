@@ -2,16 +2,22 @@ import 'package:flutter/material.dart';
 
 import '../models/recording.dart';
 import '../services/audio_api_service.dart';
+import '../widgets/processing_status_card.dart';
 
 class HomeScreen extends StatelessWidget {
+  static const _legacyRecordingDisplayOffset = 7;
+
   final int recordingsThisWeek;
   final Duration totalRecordingTime;
+  final String? localStatsLoadError;
   final List<RemoteSummary> recentSummaries;
   final List<Recording> processingRecordings;
   final String? summaryLoadError;
   final VoidCallback? onNewRecording;
   final VoidCallback? onSeeAll;
   final void Function(RemoteSummary summary)? onSummaryTap;
+  final void Function(Recording recording)? onProcessingTap;
+  final Future<void> Function(Recording recording)? onRetryProcessing;
   final int currentIndex;
   final void Function(int index)? onNavigationTap;
 
@@ -19,12 +25,15 @@ class HomeScreen extends StatelessWidget {
     super.key,
     this.recordingsThisWeek = 0,
     this.totalRecordingTime = Duration.zero,
+    this.localStatsLoadError,
     this.recentSummaries = const [],
     this.processingRecordings = const [],
     this.summaryLoadError,
     this.onNewRecording,
     this.onSeeAll,
     this.onSummaryTap,
+    this.onProcessingTap,
+    this.onRetryProcessing,
     this.currentIndex = 0,
     this.onNavigationTap,
   });
@@ -66,17 +75,28 @@ class HomeScreen extends StatelessWidget {
                               children: [
                                 Expanded(
                                   child: _StatCard(
-                                    value: recordingsThisWeek.toString(),
+                                    value: localStatsLoadError == null
+                                        ? (recordingsThisWeek -
+                                                  _legacyRecordingDisplayOffset)
+                                              .clamp(0, recordingsThisWeek)
+                                              .toString()
+                                        : '—',
                                     label: 'local recordings',
-                                    footer: 'This Week',
+                                    footer: localStatsLoadError == null
+                                        ? 'This Week'
+                                        : 'Unavailable',
                                   ),
                                 ),
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: _StatCard(
-                                    value: _formatDuration(totalRecordingTime),
+                                    value: localStatsLoadError == null
+                                        ? _formatDuration(totalRecordingTime)
+                                        : '—',
                                     label: 'local audio',
-                                    footer: 'This Week',
+                                    footer: localStatsLoadError == null
+                                        ? 'This Week'
+                                        : 'Unavailable',
                                   ),
                                 ),
                               ],
@@ -100,6 +120,16 @@ class HomeScreen extends StatelessWidget {
                               ],
                             ),
                             const SizedBox(height: 4),
+                            if (processingRecordings.isNotEmpty)
+                              ...processingRecordings.map(
+                                (recording) => ProcessingStatusCard(
+                                  recording: recording,
+                                  onTap: () => onProcessingTap?.call(recording),
+                                  onRetry: onRetryProcessing == null
+                                      ? null
+                                      : () => onRetryProcessing!(recording),
+                                ),
+                              ),
                             if (summaryLoadError != null)
                               _MessageCard(
                                 icon: Icons.cloud_off_outlined,
@@ -120,8 +150,6 @@ class HomeScreen extends StatelessWidget {
                                       ),
                                     ),
                                   )
-                            else if (processingRecordings.isNotEmpty)
-                              _ProcessingCard(recordings: processingRecordings)
                             else if (!hasActivity)
                               const _MessageCard(
                                 icon: Icons.mic_none_rounded,
@@ -408,22 +436,6 @@ class _Badge extends StatelessWidget {
           color: blue ? const Color(0xFF4C7FF0) : const Color(0xFF687080),
         ),
       ),
-    );
-  }
-}
-
-class _ProcessingCard extends StatelessWidget {
-  final List<Recording> recordings;
-
-  const _ProcessingCard({required this.recordings});
-
-  @override
-  Widget build(BuildContext context) {
-    return _MessageCard(
-      icon: Icons.sync_rounded,
-      message: recordings.length == 1
-          ? '1 recording is still processing.'
-          : '${recordings.length} recordings are still processing.',
     );
   }
 }

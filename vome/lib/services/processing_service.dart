@@ -2,89 +2,204 @@ import 'dart:async';
 import 'dart:convert';
 
 import '../models/recording.dart';
+import 'audio_api_service.dart';
 import 'audio_storage_service.dart';
-import 'processing_api_client.dart';
+import 'auth_service.dart';
 import 'recording_repository.dart';
+
+class ProcessingResult {
+  final bool succeeded;
+  final String? error;
+
+  const ProcessingResult.success() : succeeded = true, error = null;
+  const ProcessingResult.failure(this.error) : succeeded = false;
+}
 
 class ProcessingService {
   ProcessingService._();
-  static final instance = ProcessingService._();
 
-  final _api = ProcessingApiClient();
+  static final instance = ProcessingService._();
+  final Set<String> _trackedRecordings = <String>{};
   static const _maxUploadBytes = 25 * 1024 * 1024;
 
-  Future<void> enqueue(Recording recording) async {
-    final fileSize = await AudioStorageService.instance.getFileSize(recording.audioPath);
-    if (fileSize == 0) {
-      await RecordingRepository.instance.updateProcessing(recording.id, status: 'Failed', error: 'Audio file is unavailable.');
-      return;
+  AudioApiService? get _api {
+    final token = AuthService.instance.token;
+    return token == null
+        ? null
+        : AudioApiService(
+            baseUrl: AuthService.defaultBaseUrl,
+            accessToken: token,
+          );
+  }
+
+  Future<ProcessingResult> enqueue(Recording recording) async {
+    if (recording.status == 'Completed') {
+      return const ProcessingResult.success();
     }
-    if (fileSize > _maxUploadBytes) {
-      await RecordingRepository.instance.updateProcessing(
-        recording.id,
-        status: 'Failed',
-        error: 'Audio files must be 25 MB or smaller.',
-      );
-      return;
+    if (!_trackedRecordings.add(recording.id)) {
+      return const ProcessingResult.success();
     }
-    await RecordingRepository.instance.updateProcessing(recording.id, status: 'Uploading');
+
     try {
-      final jobId = await _api.createJob(
-        recordingId: recording.id,
-        audioPath: AudioStorageService.instance.absolutePath(recording.audioPath),
-        title: recording.title,
-        eventType: recording.eventType,
-      );
-      await RecordingRepository.instance.updateProcessing(recording.id, status: 'Queued', jobId: jobId);
-      unawaited(_poll(recording.id, jobId));
+      final api = _api;
+      if (api == null) {
+        const error = 'Sign in to start processing.';
+        await _markUnavailable(recording, error);
+        return const ProcessingResult.failure(error);
+      }
+
+      RemoteProcessingJob job;
+      if (recording.processingJobId != null) {
+        job = await api.processingStatus(int.parse(recording.processingJobId!));
+        if (job.status == 'failed') {
+          job = await api.startProcessing(job.audioRecordId);
+        }
+      } else {
+        final fileSize = await AudioStorageService.instance.getFileSize(
+          recording.audioPath,
+        );
+        if (fileSize > _maxUploadBytes) {
+          const error = 'Audio files must be 25 MB or smaller.';
+          await _markFailed(recording, error);
+          return const ProcessingResult.failure(error);
+        }
+        if (fileSize == 0) {
+          await RecordingRepository.instance.updateProcessing(
+            recording.id,
+            status: 'Failed',
+            error: 'Audio file is unavailable.',
+          );
+          return const ProcessingResult.failure('Audio file is unavailable.');
+        }
+        final event = await api.createEvent(
+          title: recording.title,
+          category: recording.eventType,
+        );
+        final audio = await api.upload(
+          eventId: event.id,
+          filePath: AudioStorageService.instance.absolutePath(
+            recording.audioPath,
+          ),
+          clientRecordingId: recording.id,
+        );
+        job = await api.startProcessing(audio.id);
+      }
+
+      await _saveJob(recording.id, job);
+      unawaited(_poll(recording.id, job.id));
+      return const ProcessingResult.success();
+    } on FormatException {
+      const error = 'The saved processing job is invalid.';
+      await _markFailed(recording, error);
+      return const ProcessingResult.failure(error);
+    } on AudioApiException catch (error) {
+      await _markUnavailable(recording, error.toString());
+      return ProcessingResult.failure(error.toString());
     } catch (error) {
-      await RecordingRepository.instance.updateProcessing(recording.id, status: 'Failed', error: error.toString());
+      await _markUnavailable(recording, error.toString());
+      return ProcessingResult.failure(error.toString());
     }
   }
 
-  Future<void> retry(Recording recording) => enqueue(recording);
+  Future<ProcessingResult> retry(Recording recording) => enqueue(recording);
 
   Future<void> resumePendingJobs() async {
     final recordings = await RecordingRepository.instance.getAllRecordings();
     for (final recording in recordings) {
-      final jobId = recording.processingJobId;
-      if (jobId != null && recording.status != 'Completed' && recording.status != 'Failed') {
-        unawaited(_poll(recording.id, jobId));
+      if (recording.status == 'Pending' ||
+          (recording.processingJobId != null && recording.status != 'Failed')) {
+        unawaited(enqueue(recording));
       }
     }
   }
 
-  Future<void> _poll(String recordingId, String jobId) async {
-    for (var attempt = 0; attempt < 120; attempt++) {
-      await Future<void>.delayed(const Duration(seconds: 2));
-      try {
-        final job = await _api.getJob(jobId);
+  Future<RemoteSummary?> fetchResult(Recording recording) async {
+    final jobId = recording.processingJobId;
+    final api = _api;
+    if (jobId == null || api == null) return null;
+    return api.processingResult(int.parse(jobId));
+  }
+
+  Future<void> _poll(String recordingId, int jobId) async {
+    try {
+      final api = _api;
+      if (api == null) return;
+      for (var attempt = 0; attempt < 120; attempt++) {
+        final job = await api.processingStatus(jobId);
+        final recording = await RecordingRepository.instance.getRecordingById(
+          recordingId,
+        );
+        if (recording == null) return;
+        await _saveJob(recordingId, job);
         if (job.status == 'completed') {
+          final summary = await api.processingResult(jobId);
           await RecordingRepository.instance.updateProcessing(
             recordingId,
             status: 'Completed',
-            transcript: job.transcript,
-            summaryJson: jsonEncode(job.summary),
+            summaryJson: jsonEncode(summary.toJson()),
             error: null,
           );
-          final recording = await RecordingRepository.instance.getRecordingById(recordingId);
-          if (recording != null && !recording.audioRetained) {
-            await RecordingRepository.instance.removeLocalAudio(recording);
-          }
           return;
         }
-        if (job.status == 'failed') {
-          await RecordingRepository.instance.updateProcessing(recordingId, status: 'Failed', error: job.error);
-          return;
-        }
-        await RecordingRepository.instance.updateProcessing(recordingId, status: _titleCase(job.status));
-      } catch (error) {
-        await RecordingRepository.instance.updateProcessing(recordingId, status: 'Failed', error: error.toString());
-        return;
+        if (job.status == 'failed') return;
+        await Future<void>.delayed(const Duration(seconds: 2));
       }
+      await RecordingRepository.instance.updateProcessing(
+        recordingId,
+        status: 'Failed',
+        error: 'Processing timed out. Try again.',
+      );
+    } on AudioApiException catch (error) {
+      final recording = await RecordingRepository.instance.getRecordingById(
+        recordingId,
+      );
+      if (recording != null) {
+        await _markUnavailable(recording, error.toString());
+      }
+    } catch (error) {
+      final recording = await RecordingRepository.instance.getRecordingById(
+        recordingId,
+      );
+      if (recording != null) {
+        await _markUnavailable(recording, error.toString());
+      }
+    } finally {
+      _trackedRecordings.remove(recordingId);
     }
-    await RecordingRepository.instance.updateProcessing(recordingId, status: 'Failed', error: 'Processing timed out. Try again.');
   }
 
-  String _titleCase(String value) => value.isEmpty ? value : '${value[0].toUpperCase()}${value.substring(1)}';
+  Future<void> _saveJob(String recordingId, RemoteProcessingJob job) {
+    return RecordingRepository.instance.updateProcessing(
+      recordingId,
+      status: _localStatus(job.status),
+      jobId: job.id.toString(),
+      error: job.errorMessage,
+    );
+  }
+
+  Future<void> _markFailed(Recording recording, String error) {
+    _trackedRecordings.remove(recording.id);
+    return RecordingRepository.instance.updateProcessing(
+      recording.id,
+      status: 'Failed',
+      error: error,
+    );
+  }
+
+  Future<void> _markUnavailable(Recording recording, String error) {
+    _trackedRecordings.remove(recording.id);
+    return RecordingRepository.instance.updateProcessing(
+      recording.id,
+      status: recording.processingJobId == null ? 'Pending' : recording.status,
+      error: error,
+    );
+  }
+
+  String _localStatus(String status) => switch (status) {
+    'pending' => 'Pending',
+    'processing' => 'Processing',
+    'completed' => 'Completed',
+    'failed' => 'Failed',
+    _ => 'Pending',
+  };
 }

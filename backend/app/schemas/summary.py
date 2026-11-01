@@ -11,6 +11,7 @@ class SummaryResponse(BaseModel):
     id: int
     transcript_id: int
     audio_record_id: int
+    client_recording_id: str | None = None
     event_id: int
     event_title: str
     audio_filename: str

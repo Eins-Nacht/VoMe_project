@@ -70,6 +70,8 @@ def test_processing_creates_transcript_and_summary(client, tmp_path):
     assert result.status_code == 200
     assert result.json()["transcript_text"] == "Mock transcript for sample.mp3"
     assert result.json()["summary"] == "Mock summary: Mock transcript for sample.mp3"
+    assert result.json()["event_title"] == "Processing event"
+    assert result.json()["audio"]["filename"] == "sample.mp3"
     assert result.json()["mood"] == "Neutral"
     assert result.json()["action_status"] == "No Action"
 
@@ -91,17 +93,64 @@ def test_processing_prevents_duplicate_completed_job(client, tmp_path):
         db.close()
 
 
+def test_upload_is_idempotent_for_client_recording_id(client, tmp_path):
+    storage.root = tmp_path / "audio"
+    headers = register_and_login(client, "idempotent-upload@example.com")
+    event_id = create_event(client, "idempotent-upload@example.com")
+    first = client.post(
+        "/api/v1/audio",
+        headers=headers,
+        data={"event_id": str(event_id), "client_recording_id": "client-1"},
+        files={"file": ("sample.mp3", BytesIO(b"audio data"), "audio/mpeg")},
+    )
+    second = client.post(
+        "/api/v1/audio",
+        headers=headers,
+        data={"event_id": str(event_id), "client_recording_id": "client-1"},
+        files={"file": ("sample.mp3", BytesIO(b"different data"), "audio/mpeg")},
+    )
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert second.json()["id"] == first.json()["id"]
+    db = client.app.state.testing_session()
+    try:
+        assert db.query(AudioRecord).count() == 1
+    finally:
+        db.close()
+
+
 def test_processing_requires_ownership_and_authentication(client, tmp_path):
     storage.root = tmp_path / "audio"
     owner_headers = register_and_login(client, "processing-owner@example.com")
     other_headers = register_and_login(client, "processing-other@example.com")
     event_id = create_event(client, "processing-owner@example.com")
     audio = upload(client, owner_headers, event_id).json()
+    started = client.post(
+        f"/api/v1/processing/audio/{audio['id']}",
+        headers=owner_headers,
+    )
+    job_id = started.json()["id"]
 
     assert client.post(f"/api/v1/processing/audio/{audio['id']}").status_code == 401
     assert (
         client.post(
             f"/api/v1/processing/audio/{audio['id']}",
+            headers=other_headers,
+        ).status_code
+        == 404
+    )
+
+    assert (
+        client.get(
+            f"/api/v1/processing/{job_id}",
+            headers=other_headers,
+        ).status_code
+        == 404
+    )
+    assert (
+        client.get(
+            f"/api/v1/processing/{job_id}/result",
             headers=other_headers,
         ).status_code
         == 404

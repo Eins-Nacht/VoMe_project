@@ -23,6 +23,7 @@ class RemoteAudioRecord {
   final int size;
   final double? duration;
   final String audioPath;
+  final String? clientRecordingId;
 
   const RemoteAudioRecord({
     required this.id,
@@ -32,6 +33,7 @@ class RemoteAudioRecord {
     required this.size,
     required this.duration,
     required this.audioPath,
+    this.clientRecordingId,
   });
 
   factory RemoteAudioRecord.fromJson(Map<String, dynamic> json) =>
@@ -43,6 +45,7 @@ class RemoteAudioRecord {
         size: json['size'] as int,
         duration: (json['duration'] as num?)?.toDouble(),
         audioPath: json['audio_path'] as String,
+        clientRecordingId: json['client_recording_id'] as String?,
       );
 }
 
@@ -85,6 +88,7 @@ class RemoteProcessingJob {
 class RemoteSummary {
   final int id;
   final int audioRecordId;
+  final String? clientRecordingId;
   final int eventId;
   final String eventTitle;
   final String audioFilename;
@@ -99,6 +103,7 @@ class RemoteSummary {
   const RemoteSummary({
     required this.id,
     required this.audioRecordId,
+    this.clientRecordingId,
     required this.eventId,
     required this.eventTitle,
     required this.audioFilename,
@@ -114,6 +119,7 @@ class RemoteSummary {
   factory RemoteSummary.fromJson(Map<String, dynamic> json) => RemoteSummary(
     id: json['id'] as int,
     audioRecordId: json['audio_record_id'] as int,
+    clientRecordingId: json['client_recording_id'] as String?,
     eventId: json['event_id'] as int,
     eventTitle: json['event_title'] as String,
     audioFilename: json['audio_filename'] as String,
@@ -125,6 +131,42 @@ class RemoteSummary {
     mood: json['mood'] as String?,
     actionStatus: json['action_status'] as String?,
   );
+
+  factory RemoteSummary.fromProcessingResult(Map<String, dynamic> json) {
+    final audio = json['audio'] as Map<String, dynamic>;
+    return RemoteSummary(
+      id: json['id'] as int,
+      audioRecordId: json['audio_record_id'] as int,
+      clientRecordingId: audio['client_recording_id'] as String?,
+      eventId: audio['event_id'] as int,
+      eventTitle: json['event_title'] as String,
+      audioFilename: audio['filename'] as String,
+      summary: json['summary'] as String? ?? '',
+      keyPoints: _strings(json['key_points']),
+      actionItems: _strings(json['action_items']),
+      keywords: _strings(json['keywords']),
+      category:
+          json['event_category'] as String? ?? json['category'] as String?,
+      mood: json['mood'] as String?,
+      actionStatus: json['action_status'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'audio_record_id': audioRecordId,
+    'client_recording_id': clientRecordingId,
+    'event_id': eventId,
+    'event_title': eventTitle,
+    'audio_filename': audioFilename,
+    'summary': summary,
+    'key_points': keyPoints,
+    'action_items': actionItems,
+    'keywords': keywords,
+    'category': category,
+    'mood': mood,
+    'action_status': actionStatus,
+  };
 }
 
 List<String> _strings(dynamic value) => (value as List<dynamic>? ?? const [])
@@ -152,10 +194,14 @@ class AudioApiService {
   Future<RemoteAudioRecord> upload({
     required int eventId,
     required String filePath,
+    String? clientRecordingId,
   }) async {
     final request = http.MultipartRequest('POST', _uri('/audio'))
       ..headers.addAll(_headers)
       ..fields['event_id'] = eventId.toString()
+      ..fields.addAll({
+        if (clientRecordingId != null) 'client_recording_id': clientRecordingId,
+      })
       ..files.add(await http.MultipartFile.fromPath('file', filePath));
     final response = await http.Response.fromStream(
       await _client.send(request),
@@ -217,7 +263,7 @@ class AudioApiService {
   Future<RemoteSummary> processingResult(int jobId) async {
     final response = await _get('/processing/$jobId/result');
     _checkResponse(response);
-    return RemoteSummary.fromJson(_decodeJson(response));
+    return RemoteSummary.fromProcessingResult(_decodeJson(response));
   }
 
   Future<List<RemoteSummary>> listSummaries({

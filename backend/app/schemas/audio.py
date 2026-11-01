@@ -15,3 +15,4 @@ class AudioRecordResponse(BaseModel):
     audio_path: str
     created_at: datetime
     updated_at: datetime
+    client_recording_id: str | None = None

@@ -35,6 +35,7 @@ def _response(record: AudioRecord) -> AudioRecordResponse:
         audio_path=record.file_path,
         created_at=record.created_at,
         updated_at=record.updated_at,
+        client_recording_id=record.client_recording_id,
     )
 
 
@@ -52,6 +53,7 @@ def _owned_record(db: Session, user: User, record_id: int) -> AudioRecord:
 @router.post("", response_model=AudioRecordResponse, status_code=status.HTTP_201_CREATED)
 async def upload_audio(
     event_id: int = Form(...),
+    client_recording_id: str | None = Form(default=None),
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -59,6 +61,17 @@ async def upload_audio(
     event = db.scalar(select(Event).where(Event.id == event_id, Event.user_id == current_user.id))
     if event is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+    if client_recording_id:
+        existing = db.scalar(
+            select(AudioRecord)
+            .join(AudioRecord.event)
+            .where(
+                AudioRecord.client_recording_id == client_recording_id,
+                Event.user_id == current_user.id,
+            )
+        )
+        if existing is not None:
+            return _response(existing)
 
     filename = Path(file.filename or "").name
     extension = Path(filename).suffix.lower().lstrip(".")
@@ -91,6 +104,7 @@ async def upload_audio(
         format=extension,
         size=size,
         file_path=relative_path,
+        client_recording_id=client_recording_id,
     )
     try:
         db.add(record)
