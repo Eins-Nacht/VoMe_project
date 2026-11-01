@@ -60,12 +60,12 @@ def test_whisper_and_openai_providers_are_reused(monkeypatch):
     assert isinstance(first_stt, WhisperSttProvider)
 
 
-def test_whisper_configuration_is_forwarded_and_language_is_optional():
+def test_whisper_forces_thai_and_preserves_vad_filter():
     provider = WhisperSttProvider(
         "test",
         device="cpu",
         compute_type="int8",
-        language="th",
+        language="en",
         model_dir="/models",
     )
     calls = []
@@ -84,7 +84,7 @@ def test_whisper_configuration_is_forwarded_and_language_is_optional():
     assert calls == [{"vad_filter": True, "language": "th"}]
 
 
-def test_whisper_uses_automatic_language_detection_when_unset():
+def test_whisper_does_not_use_automatic_language_detection_when_unset():
     provider = WhisperSttProvider("test", language=None)
     calls = []
 
@@ -99,7 +99,7 @@ def test_whisper_uses_automatic_language_detection_when_unset():
     result = provider.transcribe(Path("audio.wav"), "audio.wav")
 
     assert result.language == "en"
-    assert calls == [{"vad_filter": True}]
+    assert calls == [{"vad_filter": True, "language": "th"}]
 
 
 def test_whisper_consumes_segments_while_transcription_lock_is_held():
@@ -113,7 +113,7 @@ def test_whisper_consumes_segments_while_transcription_lock_is_held():
         yield SimpleNamespace(text="hello")
 
     class FakeModel:
-        def transcribe(self, audio_path, vad_filter):
+        def transcribe(self, audio_path, vad_filter, language):
             return segments(), SimpleNamespace(language="en")
 
     provider._get_model = lambda: FakeModel()
@@ -145,7 +145,7 @@ def test_whisper_calls_are_serialized_for_one_provider():
         yield SimpleNamespace(text="serialized")
 
     class FakeModel:
-        def transcribe(self, audio_path, vad_filter):
+        def transcribe(self, audio_path, vad_filter, language):
             return make_segments(), SimpleNamespace(language="en")
 
     provider._get_model = lambda: FakeModel()
@@ -187,7 +187,7 @@ def test_whisper_errors_are_sanitized_and_empty_transcripts_are_rejected():
     provider = WhisperSttProvider("test", "int8")
 
     class FailingModel:
-        def transcribe(self, audio_path, vad_filter):
+        def transcribe(self, audio_path, vad_filter, language):
             raise RuntimeError("secret provider internals")
 
     provider._get_model = lambda: FailingModel()
@@ -199,7 +199,7 @@ def test_whisper_errors_are_sanitized_and_empty_transcripts_are_rejected():
         provider.transcribe(Path("audio.wav"), "audio.wav")
 
     class EmptyModel:
-        def transcribe(self, audio_path, vad_filter):
+        def transcribe(self, audio_path, vad_filter, language):
             return iter(()), SimpleNamespace(language="en")
 
     provider._get_model = lambda: EmptyModel()
@@ -234,7 +234,7 @@ def test_whisper_classifies_all_low_quality_segments_as_unclear():
     audio = Path("audio.wav")
 
     class FakeModel:
-        def transcribe(self, audio_path, vad_filter):
+        def transcribe(self, audio_path, vad_filter, language):
             return iter(
                 [
                     SimpleNamespace(

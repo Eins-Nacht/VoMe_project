@@ -21,8 +21,9 @@ Copy `.env.example` to `.env`.
 
 Whisper defaults to the `small` model on CPU with `int8` compute. Set
 `WHISPER_MODEL`, `WHISPER_DEVICE`, `WHISPER_COMPUTE_TYPE`, and optionally
-`WHISPER_LANGUAGE=th` for Thai. Leaving `WHISPER_LANGUAGE` empty enables
-automatic language detection. `WHISPER_MODEL_DIR` controls the model cache;
+Thai transcription is forced by the provider (`language="th"`); the legacy
+`WHISPER_LANGUAGE` setting remains accepted for compatibility.
+`WHISPER_MODEL_DIR` controls the model cache;
 Docker uses `/models`, which is backed by the `whisper-models` volume.
 The older `FASTER_WHISPER_MODEL` and `FASTER_WHISPER_COMPUTE_TYPE` variables
 remain accepted for compatibility and are used when the corresponding new

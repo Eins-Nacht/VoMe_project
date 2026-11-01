@@ -1,10 +1,13 @@
 from dataclasses import dataclass
 import json
+import logging
 from pathlib import Path
 from threading import Lock, RLock
 from typing import Protocol
 
 from app.models import ActionStatus, Mood, TranscriptionStatus
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -37,6 +40,7 @@ class LlmProvider(Protocol):
 
 
 class WhisperSttProvider:
+    _transcription_language = "th"
     _model_cache: dict[tuple[str, str, str, str | None], object] = {}
     _model_cache_lock = Lock()
 
@@ -118,16 +122,25 @@ class WhisperSttProvider:
                     message=validation_error,
                 )
             try:
+                logger.info(
+                    "Starting Faster-Whisper transcription with language=%s",
+                    self._transcription_language,
+                )
                 segments, info = self._get_model().transcribe(
                     str(audio_path),
                     vad_filter=True,
-                    **({"language": self.language} if self.language else {}),
+                    language=self._transcription_language,
                 )
                 collected_segments = list(segments)
             except Exception:
                 raise RuntimeError(
                     "Whisper model initialization or transcription failed"
                 ) from None
+            reported_language = getattr(info, "language", None)
+            logger.info(
+                "Faster-Whisper transcription completed; reported language=%s",
+                reported_language or "unknown",
+            )
             text = " ".join(
                 segment.text.strip() for segment in collected_segments
             ).strip()
