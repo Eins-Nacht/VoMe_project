@@ -27,6 +27,7 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
   final AudioPlayer _player = AudioPlayer();
   late RemoteSummary _summary;
   bool _playing = false;
+  bool _regenerating = false;
   bool _audioRetained = false;
   Recording? _localRecording;
 
@@ -217,6 +218,28 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
     }
   }
 
+  Future<void> _regenerateSummary() async {
+    setState(() => _regenerating = true);
+    try {
+      final updated = await RemoteSummaryService.instance.api!
+          .regenerateSummary(_summary.id);
+      if (mounted) {
+        setState(() => _summary = updated);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Summary regenerated.')));
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$error')));
+      }
+    } finally {
+      if (mounted) setState(() => _regenerating = false);
+    }
+  }
+
   Future<void> _keepLocalAudio() async {
     final recording = _localRecording;
     if (recording == null || _audioRetained) return;
@@ -337,6 +360,23 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
               'Category: ${_summary.category}',
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
+          const SizedBox(height: 24),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton.icon(
+              onPressed: _regenerating ? null : _regenerateSummary,
+              icon: _regenerating
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.refresh),
+              label: Text(
+                _regenerating ? 'Regenerating...' : 'Regenerate summary',
+              ),
+            ),
+          ),
         ],
       ),
     );

@@ -1,3 +1,5 @@
+from contextlib import nullcontext
+
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
@@ -213,6 +215,41 @@ class ProcessingService:
                 if existing is None:
                     raise
                 return existing
+            db.refresh(summary)
+            return summary
+
+    def regenerate_summary(self, summary_id: int, db: Session | None = None) -> Summary:
+        with (
+            nullcontext(db)
+            if db is not None
+            else self.session_factory()
+        ) as db:
+            summary = db.get(Summary, summary_id)
+            if summary is None:
+                raise ValueError("Summary not found")
+            transcript = db.get(Transcript, summary.transcript_id)
+            if transcript is None:
+                raise ValueError("Transcript not found")
+            text = (
+                transcript.corrected_transcript
+                or transcript.raw_transcript
+                or transcript.text
+            )
+            if not text or not text.strip():
+                raise ValueError("A non-empty transcript is required")
+            if self.llm_provider is None:
+                self.llm_provider = get_configured_llm_provider(get_settings())
+            result = self.llm_provider.summarize(
+                TranscriptResult(text=text, language=transcript.language)
+            )
+            summary.summary = result.summary
+            summary.key_points = result.key_points
+            summary.action_items = result.action_items
+            summary.keywords = result.keywords
+            summary.category = result.category
+            summary.mood = result.mood
+            summary.action_status = result.action_status
+            db.commit()
             db.refresh(summary)
             return summary
 

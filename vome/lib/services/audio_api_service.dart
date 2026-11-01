@@ -389,6 +389,15 @@ class AudioApiService {
     _checkResponse(response);
   }
 
+  Future<RemoteSummary> regenerateSummary(int id) async {
+    final response = await _client.post(
+      _uri('/summaries/$id/regenerate'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+    return RemoteSummary.fromJson(_decodeJson(response));
+  }
+
   void _checkResponse(http.Response response) {
     if (response.statusCode == 401) {
       AuthService.instance.logout();

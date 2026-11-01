@@ -8,6 +8,7 @@ from app.api.v1.auth import get_current_user
 from app.infrastructure.database import get_db
 from app.models import AudioRecord, Event, Summary, Transcript, User
 from app.schemas.summary import SummaryListResponse, SummaryResponse, SummaryUpdate
+from app.services.processing_service import ProcessingService
 
 router = APIRouter(tags=["summaries"])
 
@@ -155,6 +156,24 @@ def update_summary(
     db.commit()
     db.refresh(summary)
     return _to_response(summary, transcript, audio, event)
+
+
+@router.post("/summaries/{summary_id}/regenerate", response_model=SummaryResponse)
+def regenerate_summary(
+    summary_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    summary, _, _, _ = _owned_summary(db, current_user, summary_id)
+    service = ProcessingService(lambda: db)
+    try:
+        service.regenerate_summary(summary.id, db=db)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    db.expire_all()
+    return _to_response(*_owned_summary(db, current_user, summary_id))
 
 
 @router.delete("/summaries/{summary_id}", status_code=status.HTTP_204_NO_CONTENT)
