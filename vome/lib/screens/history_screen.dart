@@ -367,14 +367,59 @@ class _NavigationBar extends StatelessWidget {
   const _NavigationBar({required this.index, required this.onTap});
 
   @override
-  Widget build(BuildContext context) => BottomNavigationBar(
-    currentIndex: index,
-    onTap: onTap,
-    items: const [
-      BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-      BottomNavigationBarItem(icon: Icon(Icons.history), label: 'History'),
-      BottomNavigationBarItem(icon: Icon(Icons.upload), label: 'Upload'),
-      BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
-    ],
-  );
+  Widget build(BuildContext context) {
+    const items = [
+      (icon: Icons.grid_view_rounded, label: 'Home'),
+      (icon: Icons.history_rounded, label: 'History'),
+      (icon: Icons.arrow_upward_rounded, label: 'Upload'),
+      (icon: Icons.person_outline_rounded, label: 'Profile'),
+    ];
+
+    return Container(
+      height: 76,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: Color(0xFFE9EDF3))),
+      ),
+      child: Row(
+        children: List.generate(items.length, (itemIndex) {
+          final selected = index == itemIndex;
+          return Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => onTap(itemIndex),
+              child: SizedBox(
+                height: double.infinity,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      items[itemIndex].icon,
+                      size: 19,
+                      color: selected
+                          ? const Color(0xFF4C7FF0)
+                          : const Color(0xFF667085),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      items[itemIndex].label,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: selected
+                            ? FontWeight.w600
+                            : FontWeight.w500,
+                        color: selected
+                            ? const Color(0xFF4C7FF0)
+                            : const Color(0xFF667085),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
 }

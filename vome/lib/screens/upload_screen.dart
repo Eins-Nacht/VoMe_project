@@ -776,85 +776,64 @@ class _BottomNavigation extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final List<_NavItem> items = [
-      const _NavItem(icon: Icons.grid_view_rounded, label: 'Home'),
-
-      const _NavItem(icon: Icons.history_rounded, label: 'History'),
-
-      const _NavItem(icon: Icons.arrow_upward_rounded, label: 'Upload'),
-
-      const _NavItem(icon: Icons.person_outline_rounded, label: 'Profile'),
+    const items = [
+      (icon: Icons.grid_view_rounded, label: 'Home'),
+      (icon: Icons.history_rounded, label: 'History'),
+      (icon: Icons.arrow_upward_rounded, label: 'Upload'),
+      (icon: Icons.person_outline_rounded, label: 'Profile'),
     ];
 
     return Container(
-      height: 68,
-
+      height: 76,
       decoration: const BoxDecoration(
         color: Colors.white,
-
-        border: Border(top: BorderSide(color: Color(0xFFE8ECF2), width: 1)),
+        border: Border(top: BorderSide(color: Color(0xFFE8ECF2))),
       ),
-
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-
-        children: List.generate(items.length, (int index) {
-          final bool selected = currentIndex == index;
-
+        children: List.generate(items.length, (index) {
+          final selected = currentIndex == index;
           return Expanded(
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
-
               onTap: () {
                 switch (index) {
                   case 0:
                     onHomeTap?.call();
-                    break;
-
                   case 1:
                     onHistoryTap?.call();
-                    break;
-
                   case 2:
                     onUploadTap?.call();
-                    break;
-
                   case 3:
                     onProfileTap?.call();
-                    break;
                 }
               },
-
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-
-                children: [
-                  Icon(
-                    items[index].icon,
-
-                    size: 19,
-
-                    color: selected
-                        ? const Color(0xFF4C7FF0)
-                        : const Color(0xFFA7B0BF),
-                  ),
-
-                  const SizedBox(height: 4),
-
-                  Text(
-                    items[index].label,
-
-                    style: TextStyle(
-                      fontSize: 9,
-
+              child: SizedBox(
+                height: double.infinity,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      items[index].icon,
+                      size: 19,
                       color: selected
                           ? const Color(0xFF4C7FF0)
-                          : const Color(0xFFA7B0BF),
-
-                      fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
+                          : const Color(0xFF667085),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 4),
+                    Text(
+                      items[index].label,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: selected
+                            ? FontWeight.w600
+                            : FontWeight.w500,
+                        color: selected
+                            ? const Color(0xFF4C7FF0)
+                            : const Color(0xFF667085),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           );
@@ -862,15 +841,4 @@ class _BottomNavigation extends StatelessWidget {
       ),
     );
   }
-}
-
-// ================================================================
-// NAV ITEM MODEL
-// ================================================================
-
-class _NavItem {
-  final IconData icon;
-  final String label;
-
-  const _NavItem({required this.icon, required this.label});
 }

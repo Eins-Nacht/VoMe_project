@@ -492,41 +492,45 @@ class _BottomNavigation extends StatelessWidget {
     ];
 
     return Container(
-      height: 68,
+      height: 76,
       decoration: const BoxDecoration(
         color: Colors.white,
         border: Border(top: BorderSide(color: Color(0xFFE9EDF3))),
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: List.generate(items.length, (index) {
           final selected = currentIndex == index;
-          return GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => onTap?.call(index),
-            child: SizedBox(
-              width: 65,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    items[index].icon,
-                    size: 19,
-                    color: selected
-                        ? const Color(0xFF4C7FF0)
-                        : const Color(0xFFA7B0BF),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    items[index].label,
-                    style: TextStyle(
-                      fontSize: 9,
+          return Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => onTap?.call(index),
+              child: SizedBox(
+                height: double.infinity,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      items[index].icon,
+                      size: 19,
                       color: selected
                           ? const Color(0xFF4C7FF0)
-                          : const Color(0xFFA7B0BF),
+                          : const Color(0xFF667085),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 4),
+                    Text(
+                      items[index].label,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: selected
+                            ? FontWeight.w600
+                            : FontWeight.w500,
+                        color: selected
+                            ? const Color(0xFF4C7FF0)
+                            : const Color(0xFF667085),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           );
