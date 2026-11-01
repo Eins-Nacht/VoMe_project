@@ -305,8 +305,8 @@ class _AppRootState extends State<AppRoot> with WidgetsBindingObserver {
         _AppScreen.processing => ProcessingStatusScreen(
           recording: _selectedRecording,
           recordings: _processingRecordings,
-          onSummaryReady: (summary) async {
-            _openRecordingDetail(summary);
+          onTranscriptReady: (result) async {
+            _openRecordingDetail(result);
             _refreshData();
           },
           onRefresh: () async {
@@ -324,8 +324,8 @@ class _AppRootState extends State<AppRoot> with WidgetsBindingObserver {
           TranscriptReviewScreen(
             recording: _selectedRecording!,
             onBack: _closeRecordingDetail,
-            onSummaryReady: (summary) async {
-              _openRecordingDetail(summary);
+            onSummaryReady: (result) async {
+              _openRecordingDetail(result);
               _refreshData();
             },
           ),
@@ -344,6 +344,10 @@ class _AppRootState extends State<AppRoot> with WidgetsBindingObserver {
             onHistoryTap: () => _onNavigationTap(1),
             onUploadTap: () => _onNavigationTap(2),
             onProfileTap: () => _onNavigationTap(3),
+            completedRecordings: _allRecordings
+                .where((recording) => recording.status == 'Completed')
+                .toList(),
+            onRecordingTap: _openCompletedProcessing,
             onSummaryTap: _openRecordingDetail,
             processingRecordings: _activeProcessingRecordings,
             onProcessingTap: (_) => _openProcessingStatus(),

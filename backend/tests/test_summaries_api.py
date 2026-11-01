@@ -1,7 +1,7 @@
 from io import BytesIO
 
 from app.api.v1.audio import storage
-from app.models import Event, Summary, User
+from app.models import Event, Summary, Transcript, User
 
 
 def register_and_login(client, email):
@@ -42,11 +42,25 @@ def create_summary(client, headers, event_id, filename="meeting.mp3"):
     audio_id = upload.json()["id"]
     job = client.post(f"/api/v1/processing/audio/{audio_id}", headers=headers)
     job_id = job.json()["id"]
-    summary = client.post(
-        f"/api/v1/processing/{job_id}/summary",
-        headers=headers,
-    )
-    assert summary.status_code == 200
+    db = client.app.state.testing_session()
+    try:
+        transcript = db.query(Transcript).filter_by(audio_record_id=audio_id).one()
+        db.add(
+            Summary(
+                transcript=transcript,
+                summary=f"Test summary: {transcript.text}",
+                key_points=["Test processing completed"],
+                action_items=[],
+                keywords=["test", "audio"],
+                category="General",
+                mood="Neutral",
+                action_status="No Action",
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+    assert job.status_code == 202
     return job_id, audio_id
 
 

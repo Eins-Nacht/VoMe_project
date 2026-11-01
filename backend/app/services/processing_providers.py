@@ -36,27 +36,6 @@ class LlmProvider(Protocol):
         ...
 
 
-class MockSttProvider:
-    def transcribe(self, audio_path: Path, filename: str) -> TranscriptResult:
-        return TranscriptResult(
-            text=f"Mock transcript for {filename}",
-            language="en",
-        )
-
-
-class MockLlmProvider:
-    def summarize(self, transcript: TranscriptResult) -> SummaryResult:
-        return SummaryResult(
-            summary=f"Mock summary: {transcript.text}",
-            key_points=["Mock processing completed"],
-            action_items=[],
-            keywords=["mock", "audio"],
-            category="General",
-            mood=Mood.NEUTRAL,
-            action_status=ActionStatus.NO_ACTION,
-        )
-
-
 class WhisperSttProvider:
     _model_cache: dict[tuple[str, str, str, str | None], object] = {}
     _model_cache_lock = Lock()
@@ -252,15 +231,13 @@ class OpenAILlmProvider:
         )
 
 
-_provider_cache: dict[tuple[object, ...], tuple[SttProvider, LlmProvider]] = {}
 _stt_provider_cache: dict[tuple[object, ...], SttProvider] = {}
+_llm_provider_cache: dict[tuple[object, ...], LlmProvider] = {}
 _provider_cache_lock = RLock()
 
 
 def get_configured_stt_provider(settings) -> SttProvider:
-    stt_name = settings.effective_stt_provider
     key = (
-        stt_name,
         settings.effective_whisper_model,
         settings.whisper_device,
         settings.effective_whisper_compute_type,
@@ -272,58 +249,45 @@ def get_configured_stt_provider(settings) -> SttProvider:
         with _provider_cache_lock:
             provider = _stt_provider_cache.get(key)
             if provider is None:
-                provider = (
-                    WhisperSttProvider(
-                        model_name=settings.effective_whisper_model,
-                        device=settings.whisper_device,
-                        compute_type=settings.effective_whisper_compute_type,
-                        language=settings.whisper_language or None,
-                        model_dir=settings.whisper_model_dir or None,
-                    )
-                    if stt_name == "faster_whisper"
-                    else MockSttProvider()
+                provider = WhisperSttProvider(
+                    model_name=settings.effective_whisper_model,
+                    device=settings.whisper_device,
+                    compute_type=settings.effective_whisper_compute_type,
+                    language=settings.whisper_language or None,
+                    model_dir=settings.whisper_model_dir or None,
                 )
                 _stt_provider_cache[key] = provider
     return provider
 
 
-def get_configured_providers(settings) -> tuple[SttProvider, LlmProvider]:
-    stt_name = settings.effective_stt_provider
-    llm_name = settings.effective_llm_provider
-    if llm_name == "openai" and not settings.openai_api_key:
-        raise RuntimeError(
-            "OPENAI_API_KEY is required when LLM_PROVIDER=openai "
-            "or PROCESSING_PROVIDER=whisper_openai"
-        )
+def get_configured_llm_provider(settings) -> LlmProvider:
+    llm_name = settings.llm_provider
+    if llm_name is None:
+        raise RuntimeError("LLM_PROVIDER must be configured for summary generation")
+    if llm_name != "openai":
+        raise RuntimeError(f"Unsupported LLM_PROVIDER: {llm_name}")
+    if not settings.openai_api_key:
+        raise RuntimeError("OPENAI_API_KEY is required when LLM_PROVIDER=openai")
 
     key = (
-        stt_name,
         llm_name,
-        settings.effective_whisper_model,
-        settings.whisper_device,
-        settings.effective_whisper_compute_type,
-        settings.whisper_language or None,
-        settings.whisper_model_dir or None,
         settings.openai_api_key,
         settings.openai_summary_model,
     )
-    providers = _provider_cache.get(key)
-    if providers is None:
+    provider = _llm_provider_cache.get(key)
+    if provider is None:
         with _provider_cache_lock:
-            providers = _provider_cache.get(key)
-            if providers is None:
-                stt_provider = get_configured_stt_provider(settings)
-                llm_provider: LlmProvider = (
-                    OpenAILlmProvider(
-                        settings.openai_api_key,
-                        settings.openai_summary_model,
-                    )
-                    if llm_name == "openai"
-                    else MockLlmProvider()
+            provider = _llm_provider_cache.get(key)
+            if provider is None:
+                provider = OpenAILlmProvider(
+                    settings.openai_api_key,
+                    settings.openai_summary_model,
                 )
-                providers = (
-                    stt_provider,
-                    llm_provider,
-                )
-                _provider_cache[key] = providers
-    return providers
+                _llm_provider_cache[key] = provider
+    return provider
+
+
+def get_configured_providers(settings) -> tuple[SttProvider, LlmProvider]:
+    stt_provider = get_configured_stt_provider(settings)
+    llm_provider = get_configured_llm_provider(settings)
+    return stt_provider, llm_provider

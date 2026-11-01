@@ -1,6 +1,4 @@
 from functools import lru_cache
-from typing import Literal
-
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,9 +9,7 @@ class Settings(BaseSettings):
     jwt_secret: str = "change-this-development-secret-use-at-least-32-bytes"
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
-    processing_provider: Literal["mock", "whisper_openai"] = "mock"
-    stt_provider: Literal["mock", "faster_whisper"] = "faster_whisper"
-    llm_provider: Literal["mock", "openai"] | None = None
+    llm_provider: str | None = None
     openai_api_key: str | None = None
     openai_summary_model: str = "gpt-4o-mini"
     whisper_model: str = "Systran/faster-whisper-small"
@@ -24,16 +20,6 @@ class Settings(BaseSettings):
     temporary_audio_max_age_seconds: int = 24 * 60 * 60
     faster_whisper_model: str | None = None
     faster_whisper_compute_type: str | None = None
-
-    @property
-    def effective_stt_provider(self) -> Literal["mock", "faster_whisper"]:
-        return self.stt_provider
-
-    @property
-    def effective_llm_provider(self) -> Literal["mock", "openai"]:
-        if self.llm_provider is not None:
-            return self.llm_provider
-        return "openai" if self.processing_provider == "whisper_openai" else "mock"
 
     @property
     def effective_whisper_model(self) -> str:

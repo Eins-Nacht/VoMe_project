@@ -8,20 +8,9 @@ import pytest
 from app.core.config import Settings
 from app.services import processing_providers
 from app.services.processing_providers import (
-    MockLlmProvider,
-    MockSttProvider,
     WhisperSttProvider,
     get_configured_providers,
 )
-
-
-def test_mock_provider_selection_is_explicit():
-    stt, llm = get_configured_providers(
-        Settings(processing_provider="mock", stt_provider="mock")
-    )
-
-    assert isinstance(stt, MockSttProvider)
-    assert isinstance(llm, MockLlmProvider)
 
 
 def test_openai_provider_requires_api_key():
@@ -30,35 +19,36 @@ def test_openai_provider_requires_api_key():
         match="OPENAI_API_KEY is required",
     ):
         get_configured_providers(
-            Settings(processing_provider="whisper_openai", openai_api_key=None)
+            Settings(llm_provider="openai", openai_api_key=None)
         )
 
 
-def test_faster_whisper_can_run_with_mock_llm_without_api_key():
-    processing_providers._provider_cache.clear()
-    stt, llm = get_configured_providers(
-        Settings(
-            stt_provider="faster_whisper",
-            llm_provider="mock",
-            openai_api_key=None,
+def test_faster_whisper_requires_a_real_llm_provider_for_summaries():
+    with pytest.raises(
+        RuntimeError,
+        match="LLM_PROVIDER must be configured",
+    ):
+        get_configured_providers(
+            Settings(
+                _env_file=None,
+                openai_api_key=None,
+            )
         )
-    )
-
-    assert isinstance(stt, WhisperSttProvider)
-    assert isinstance(llm, MockLlmProvider)
 
 
-def test_faster_whisper_is_the_default_stt_provider():
+def test_faster_whisper_is_the_only_stt_provider():
     settings = Settings()
 
-    assert settings.effective_stt_provider == "faster_whisper"
     assert settings.effective_whisper_model == "Systran/faster-whisper-small"
+    assert isinstance(
+        processing_providers.get_configured_stt_provider(settings),
+        WhisperSttProvider,
+    )
 
 
 def test_whisper_and_openai_providers_are_reused(monkeypatch):
-    processing_providers._provider_cache.clear()
     settings = Settings(
-        processing_provider="whisper_openai",
+        llm_provider="openai",
         openai_api_key="test-key",
     )
 

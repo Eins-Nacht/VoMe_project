@@ -13,20 +13,11 @@ and on cancellation before processing starts. Files older than
 
 Copy `.env.example` to `.env`.
 
-- `PROCESSING_PROVIDER=mock` uses deterministic providers for local development
-  and automated tests.
-- `PROCESSING_PROVIDER=whisper_openai` preserves the legacy combined mode:
-  Faster-Whisper transcription and OpenAI summaries. This mode requires
-  `OPENAI_API_KEY`.
-- `STT_PROVIDER=faster_whisper` enables local Faster-Whisper independently of
-  the summarizer. Set `LLM_PROVIDER=mock` to run without an OpenAI key.
-- `STT_PROVIDER=mock` and `LLM_PROVIDER=mock` select deterministic providers.
-- `LLM_PROVIDER=openai` enables OpenAI summaries and requires
-  `OPENAI_API_KEY`. STT and LLM selection are independent when these variables
-  are set.
-- The repository launcher sets `LLM_PROVIDER=openai`; put `OPENAI_API_KEY` in
-  `backend/.env` before starting it. Without a key, summary generation fails
-  explicitly rather than returning mock content.
+- Faster-Whisper is the mandatory transcription provider. Configure its model
+  with the `WHISPER_*` settings below.
+- Summary generation is currently disabled in the normal processing workflow.
+  The existing LLM settings and provider architecture remain available for a
+  future integration, but `OPENAI_API_KEY` is not required for transcription.
 
 Whisper defaults to the `small` model on CPU with `int8` compute. Set
 `WHISPER_MODEL`, `WHISPER_DEVICE`, `WHISPER_COMPUTE_TYPE`, and optionally
@@ -43,12 +34,12 @@ image installs FFmpeg, and Faster-Whisper uses PyAV for MP3, M4A, and WAV
 decoding. GPU execution requires a compatible CUDA runtime and corresponding
 Faster-Whisper/CTranslate2 setup; CPU is the configured default.
 
-The OpenAI key is only read by the backend and is never sent to Flutter or
-included in API responses. A successful transcript is committed before the processing request completes.
-The client then calls `POST /api/v1/processing/{job_id}/summary` (or
-`POST /api/v1/processing/audio/{audio_record_id}/summary`) after the local
-audio retention decision. If the LLM fails, the transcript remains available
-and the summary request can be retried without uploading audio again.
+The OpenAI key, when configured for future use, is only read by the backend and
+is never sent to Flutter or included in API responses. A successful transcript
+is committed before the processing request completes. The processing result
+endpoint returns that transcript directly. The legacy summary endpoints remain
+for compatibility but return a clear STT-only-mode response and are never
+called automatically.
 
 Completed jobs also expose `transcription_status`:
 
@@ -66,23 +57,8 @@ transcript or summary. Technical failures remain failed jobs.
 Examples:
 
 ```text
-# Mock STT + mock LLM
-PROCESSING_PROVIDER=mock
-STT_PROVIDER=
-LLM_PROVIDER=
-
-# Real Faster-Whisper + mock LLM (no OpenAI key)
-PROCESSING_PROVIDER=mock
-STT_PROVIDER=faster_whisper
-LLM_PROVIDER=mock
-WHISPER_MODEL=small
+# STT-only processing
+WHISPER_MODEL=Systran/faster-whisper-small
 WHISPER_DEVICE=cpu
 WHISPER_COMPUTE_TYPE=int8
-WHISPER_MODEL_DIR=/models
-
-# Real Faster-Whisper + OpenAI LLM
-PROCESSING_PROVIDER=mock
-STT_PROVIDER=faster_whisper
-LLM_PROVIDER=openai
-OPENAI_API_KEY=your-key
 ```

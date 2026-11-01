@@ -1,9 +1,9 @@
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 
 import '../models/recording.dart';
 import '../services/audio_api_service.dart';
-import '../services/remote_summary_service.dart';
 import '../services/recording_repository.dart';
 
 class RecordingDetailScreen extends StatefulWidget {
@@ -26,8 +26,6 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
   final AudioPlayer _player = AudioPlayer();
   late RemoteSummary _summary;
   bool _playing = false;
-  bool _saving = false;
-  bool _deleting = false;
   bool _audioRetained = false;
   Recording? _localRecording;
 
@@ -121,99 +119,27 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
     }
   }
 
-  Future<void> _edit() async {
-    final controller = TextEditingController(text: _summary.summary);
-    final value = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit summary'),
-        content: TextField(controller: controller, maxLines: 5),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    if (value == null || value.isEmpty) return;
-    setState(() => _saving = true);
-    try {
-      _summary = await RemoteSummaryService.instance.api!.updateSummary(
-        _summary.id,
-        summary: value,
-      );
-      if (mounted) setState(() => _saving = false);
-    } catch (error) {
-      if (mounted) {
-        setState(() => _saving = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('$error')));
-      }
-    }
-  }
-
-  Future<void> _delete() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete summary?'),
-        content: const Text('This cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    setState(() => _deleting = true);
-    try {
-      await RemoteSummaryService.instance.api!.deleteSummary(_summary.id);
-      await RecordingRepository.instance.deleteByClientRecordingId(
-        _summary.clientRecordingId,
-      );
-      if (_summary.clientRecordingId == null) {
-        await RecordingRepository.instance.deleteByAudioFilename(
-          _summary.audioFilename,
-        );
-      }
-      widget.onDeleted?.call();
-      widget.onBack?.call();
-    } catch (error) {
-      if (mounted) {
-        setState(() => _deleting = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('$error')));
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: const Text('Summary Detail'),
+      title: const Text('Transcript Detail'),
       leading: BackButton(onPressed: widget.onBack),
       actions: [
         IconButton(
-          onPressed: _saving ? null : _edit,
-          icon: const Icon(Icons.edit),
-        ),
-        IconButton(
-          onPressed: _deleting ? null : _delete,
-          icon: const Icon(Icons.delete_outline),
+          onPressed: _summary.transcriptText?.isNotEmpty == true
+              ? () async {
+                  await Clipboard.setData(
+                    ClipboardData(text: _summary.transcriptText!),
+                  );
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Transcript copied.')),
+                    );
+                  }
+                }
+              : null,
+          tooltip: 'Copy transcript',
+          icon: const Icon(Icons.copy),
         ),
       ],
     ),
@@ -258,13 +184,6 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
               child: const Text('Keep original audio on device'),
             ),
           ),
-        if (_summary.summary.trim().isNotEmpty)
-          _section('AI Summary', _summary.summary)
-        else
-          _section(
-            'AI Summary',
-            'Summary generation is not enabled. The transcript below is ready for review.',
-          ),
         if (_summary.transcriptText?.trim().isNotEmpty == true)
           _section('Transcript', _summary.transcriptText!)
         else
@@ -274,19 +193,6 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
             'Detected language: ${_summary.transcriptLanguage}',
             style: const TextStyle(color: Colors.grey),
           ),
-        _listSection('Key Points', _summary.keyPoints),
-        _listSection('Action Items', _summary.actionItems),
-        _listSection('Keywords', _summary.keywords),
-        Wrap(
-          spacing: 8,
-          children: [
-            if (_summary.category != null)
-              Chip(label: Text(_summary.category!)),
-            if (_summary.mood != null) Chip(label: Text(_summary.mood!)),
-            if (_summary.actionStatus != null)
-              Chip(label: Text(_summary.actionStatus!)),
-          ],
-        ),
       ],
     ),
   );
@@ -309,10 +215,5 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
       Text(message, style: const TextStyle(color: Colors.grey)),
       const SizedBox(height: 18),
     ],
-  );
-
-  Widget _listSection(String title, List<String> values) => _section(
-    title,
-    values.isEmpty ? 'None' : values.map((value) => '• $value').join('\n'),
   );
 }

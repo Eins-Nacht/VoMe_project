@@ -8,7 +8,7 @@ import '../widgets/processing_status_card.dart';
 class ProcessingStatusScreen extends StatefulWidget {
   final Recording? recording;
   final List<Recording> recordings;
-  final Future<void> Function(RemoteSummary summary)? onSummaryReady;
+  final Future<void> Function(RemoteSummary result)? onTranscriptReady;
   final Future<void> Function(Recording recording)? onRetry;
   final Future<void> Function(Recording recording)? onCompletedTap;
   final Future<void> Function(Recording recording)? onDelete;
@@ -19,7 +19,7 @@ class ProcessingStatusScreen extends StatefulWidget {
     super.key,
     this.recording,
     this.recordings = const [],
-    this.onSummaryReady,
+    this.onTranscriptReady,
     this.onRetry,
     this.onCompletedTap,
     this.onDelete,
@@ -61,7 +61,7 @@ class _ProcessingStatusScreenState extends State<ProcessingStatusScreen> {
           if (mounted) setState(() => _stage = stage);
         },
       );
-      if (mounted) await widget.onSummaryReady?.call(result);
+      if (mounted) await widget.onTranscriptReady?.call(result);
     } catch (error) {
       if (mounted) {
         setState(() {

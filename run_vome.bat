@@ -29,7 +29,7 @@ if not exist "%VOME_PYTHON%" (
     exit /b 1
 )
 
-start "VoMe Backend" /D "%~dp0backend" cmd /k "set STT_PROVIDER=faster_whisper&& set LLM_PROVIDER=openai&& set WHISPER_MODEL=Systran/faster-whisper-small&& set WHISPER_DEVICE=cpu&& set WHISPER_COMPUTE_TYPE=int8&& set HF_HUB_OFFLINE=1&& "%VOME_PYTHON%" -m alembic upgrade head && "%VOME_PYTHON%" -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+start "VoMe Backend" /D "%~dp0backend" cmd /k "set WHISPER_MODEL=Systran/faster-whisper-small&& set WHISPER_DEVICE=cpu&& set WHISPER_COMPUTE_TYPE=int8&& set HF_HUB_OFFLINE=1&& "%VOME_PYTHON%" -m alembic upgrade head && "%VOME_PYTHON%" -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
 timeout /t 3 /nobreak >nul
 

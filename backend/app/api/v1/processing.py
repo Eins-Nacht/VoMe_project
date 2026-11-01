@@ -212,7 +212,7 @@ def generate_summary(
     db: Session = Depends(get_db),
 ):
     job = _owned_job(db, current_user, job_id)
-    return _generate_summary_for_job(job, request, current_user, db)
+    return _generate_summary_for_job(job)
 
 
 @router.post(
@@ -239,45 +239,16 @@ def generate_audio_summary(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Processing job not found",
         )
-    return _generate_summary_for_job(job, request, current_user, db)
+    return _generate_summary_for_job(job)
 
 
 def _generate_summary_for_job(
     job: ProcessingJob,
-    request: Request,
-    current_user: User,
-    db: Session,
 ) -> ProcessingResultResponse:
-    if job.status != ProcessingStatus.COMPLETED:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Transcription has not completed",
-        )
-    session_factory = getattr(request.app.state, "testing_session", SessionLocal)
-    service = ProcessingService(session_factory)
-    try:
-        stt_provider, llm_provider = get_configured_providers(get_settings())
-        service.stt_provider = stt_provider
-        service.llm_provider = llm_provider
-        service.generate_summary(job.id)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Summary generation failed") from exc
-
-    db.expire_all()
-    completed = _owned_job(db, current_user, job.id)
-    completed = db.scalar(
-        select(ProcessingJob)
-        .options(
-            joinedload(ProcessingJob.audio_record)
-            .joinedload(AudioRecord.event),
-            joinedload(ProcessingJob.audio_record)
-            .joinedload(AudioRecord.transcript)
-            .joinedload(Transcript.summary),
-        )
-        .where(ProcessingJob.id == job.id)
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=(
+            "Summary generation is disabled while VoMe is operating in "
+            "STT-only mode. Retrieve the persisted transcript instead."
+        ),
     )
-    return _result_response(completed)

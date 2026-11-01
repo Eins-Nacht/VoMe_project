@@ -17,9 +17,9 @@ from app.models import (
 from app.services.audio_storage_service import AudioStorageService
 from app.services.processing_providers import (
     LlmProvider,
-    MockLlmProvider,
     SttProvider,
     TranscriptResult,
+    get_configured_llm_provider,
     get_configured_stt_provider,
 )
 
@@ -39,7 +39,7 @@ class ProcessingService:
         self.stt_provider = stt_provider or get_configured_stt_provider(
             get_settings()
         )
-        self.llm_provider = llm_provider or MockLlmProvider()
+        self.llm_provider = llm_provider
         self.storage_service = storage_service or AudioStorageService()
 
     def run(self, job_id: int) -> None:
@@ -123,6 +123,8 @@ class ProcessingService:
             if transcript.summary is not None:
                 return transcript.summary
 
+            if self.llm_provider is None:
+                self.llm_provider = get_configured_llm_provider(get_settings())
             summary_result = self.llm_provider.summarize(
                 TranscriptResult(
                     text=transcript.text,

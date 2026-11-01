@@ -81,7 +81,7 @@ def test_processing_creates_transcript_without_summary(client, tmp_path):
     assert result.status_code == 200
     assert result.json()["transcription_status"] == "success"
     assert result.json()["message"] is None
-    assert result.json()["transcript_text"] == "Mock transcript for sample.mp3"
+    assert result.json()["transcript_text"] == "Test transcript for sample.mp3"
     assert result.json()["summary"] is None
     assert result.json()["event_title"] == "Processing event"
     assert result.json()["audio"]["filename"] == "sample.mp3"
@@ -110,7 +110,7 @@ def test_processing_does_not_invoke_summary_provider(client, tmp_path):
     )
 
     assert result.status_code == 200
-    assert result.json()["transcript_text"] == "Mock transcript for sample.mp3"
+    assert result.json()["transcript_text"] == "Test transcript for sample.mp3"
     assert result.json()["summary"] is None
     db = client.app.state.testing_session()
     try:
@@ -119,7 +119,7 @@ def test_processing_does_not_invoke_summary_provider(client, tmp_path):
         db.close()
 
 
-def test_summary_generation_uses_persisted_transcript_and_is_idempotent(client, tmp_path):
+def test_summary_generation_is_disabled_in_stt_only_mode(client, tmp_path):
     storage.root = tmp_path / "audio"
     headers = register_and_login(client, "summary-generation@example.com")
     event_id = create_event(client, "summary-generation@example.com")
@@ -127,13 +127,10 @@ def test_summary_generation_uses_persisted_transcript_and_is_idempotent(client, 
     started = client.post(f"/api/v1/processing/audio/{audio['id']}", headers=headers)
     job_id = started.json()["id"]
 
-    first = client.post(f"/api/v1/processing/{job_id}/summary", headers=headers)
-    second = client.post(f"/api/v1/processing/{job_id}/summary", headers=headers)
+    response = client.post(f"/api/v1/processing/{job_id}/summary", headers=headers)
 
-    assert first.status_code == 200
-    assert first.json()["summary"] == "Mock summary: Mock transcript for sample.mp3"
-    assert second.status_code == 200
-    assert second.json()["id"] == first.json()["id"]
+    assert response.status_code == 409
+    assert "disabled" in response.json()["detail"]
 
 
 def test_summary_generation_requires_transcription_and_ownership(client, tmp_path):
@@ -163,7 +160,7 @@ def test_summary_generation_requires_transcription_and_ownership(client, tmp_pat
     ).status_code == 409
 
 
-def test_summary_generation_rejects_empty_persisted_transcript(client, tmp_path):
+def test_summary_generation_remains_disabled_for_empty_transcripts(client, tmp_path):
     storage.root = tmp_path / "audio"
     headers = register_and_login(client, "empty-transcript@example.com")
     event_id = create_event(client, "empty-transcript@example.com")
@@ -183,7 +180,8 @@ def test_summary_generation_rejects_empty_persisted_transcript(client, tmp_path)
         f"/api/v1/processing/{job_id}/summary",
         headers=headers,
     )
-    assert response.status_code == 422
+    assert response.status_code == 409
+    assert "STT-only mode" in response.json()["detail"]
 
 
 def test_processing_prevents_duplicate_completed_job(client, tmp_path):
@@ -321,7 +319,7 @@ def test_processing_failure_is_recorded_and_can_be_retried(client, tmp_path):
 
         class FailingStt:
             def transcribe(self, audio_path: Path, filename: str):
-                raise RuntimeError("mock STT failed")
+                raise RuntimeError("test STT failed")
 
         ProcessingService(
             client.app.state.testing_session,
@@ -331,7 +329,7 @@ def test_processing_failure_is_recorded_and_can_be_retried(client, tmp_path):
         db.expire_all()
         failed = db.get(ProcessingJob, job_id)
         assert failed.status is ProcessingStatus.FAILED
-        assert failed.error_message == "mock STT failed"
+        assert failed.error_message == "test STT failed"
 
         assert not (storage.root / "missing.mp3").exists()
         ProcessingService(

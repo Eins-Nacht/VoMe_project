@@ -14,6 +14,8 @@ class HistoryScreen extends StatefulWidget {
   final VoidCallback? onUploadTap;
   final VoidCallback? onProfileTap;
   final void Function(RemoteSummary summary)? onSummaryTap;
+  final List<Recording> completedRecordings;
+  final void Function(Recording recording)? onRecordingTap;
   final int currentIndex;
   final Key? refreshKey;
   final List<Recording> processingRecordings;
@@ -28,6 +30,8 @@ class HistoryScreen extends StatefulWidget {
     this.onUploadTap,
     this.onProfileTap,
     this.onSummaryTap,
+    this.completedRecordings = const [],
+    this.onRecordingTap,
     this.currentIndex = 1,
     this.refreshKey,
     this.processingRecordings = const [],
@@ -251,6 +255,38 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                 : () => widget.onDeleteProcessing!(recording),
                           ),
                         ),
+                  ],
+                ),
+              ),
+            if (widget.completedRecordings.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Transcripts',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    ...widget.completedRecordings.map(
+                      (recording) => Card(
+                        child: ListTile(
+                          onTap: () => widget.onRecordingTap?.call(recording),
+                          title: Text(recording.title),
+                          subtitle: Text(
+                            recording.transcript?.trim().isNotEmpty == true
+                                ? recording.transcript!
+                                : 'No transcript text',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          trailing: const Icon(Icons.chevron_right),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),

@@ -226,29 +226,13 @@ class ProcessingService {
             );
           }
 
-          onStage?.call('Generating summary...');
-          final summary = await api.generateSummary(jobId);
-          if (summary.transcriptionStatus != null &&
-              summary.transcriptionStatus != 'success') {
-            await RecordingRepository.instance.updateProcessing(
-              recordingId,
-              status: 'Failed',
-              error: _outcomeError(
-                summary.transcriptionStatus!,
-                summary.message,
-              ),
-            );
-            throw StateError(
-              _outcomeError(summary.transcriptionStatus!, summary.message),
-            );
-          }
           await RecordingRepository.instance.updateProcessing(
             recordingId,
             status: 'Completed',
-            transcript: summary.transcriptText,
+            transcript: transcription.transcriptText,
             error: null,
           );
-          return summary;
+          return transcription;
         }
         if (job.status == 'failed') {
           throw StateError(job.errorMessage ?? 'Transcription failed.');
