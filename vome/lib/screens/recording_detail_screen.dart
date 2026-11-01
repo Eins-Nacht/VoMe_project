@@ -131,6 +131,92 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
     }
   }
 
+  Future<void> _editSummary() async {
+    final transcriptController = TextEditingController(
+      text:
+          _summary.correctedTranscript ??
+          _summary.rawTranscript ??
+          _summary.transcriptText ??
+          '',
+    );
+    final summaryController = TextEditingController(text: _summary.summary);
+    final categoryController = TextEditingController(
+      text: _summary.category ?? '',
+    );
+    try {
+      final values =
+          await showDialog<
+            ({String transcript, String summary, String category})
+          >(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Edit summary'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: transcriptController,
+                      maxLines: 6,
+                      decoration: const InputDecoration(
+                        labelText: 'Transcript',
+                      ),
+                    ),
+                    TextField(
+                      controller: summaryController,
+                      maxLines: 4,
+                      decoration: const InputDecoration(
+                        labelText: 'AI Summary',
+                      ),
+                    ),
+                    TextField(
+                      controller: categoryController,
+                      decoration: const InputDecoration(labelText: 'Category'),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    final transcript = transcriptController.text.trim();
+                    final summary = summaryController.text.trim();
+                    if (transcript.isEmpty || summary.isEmpty) return;
+                    Navigator.pop(context, (
+                      transcript: transcript,
+                      summary: summary,
+                      category: categoryController.text.trim(),
+                    ));
+                  },
+                  child: const Text('Save'),
+                ),
+              ],
+            ),
+          );
+      if (values == null) return;
+      final updated = await RemoteSummaryService.instance.api!.updateSummary(
+        _summary.id,
+        transcriptText: values.transcript,
+        summary: values.summary,
+        category: values.category,
+      );
+      if (mounted) {
+        setState(() => _summary = updated);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Summary updated.')));
+      }
+    } finally {
+      transcriptController.dispose();
+      summaryController.dispose();
+      categoryController.dispose();
+    }
+  }
+
   Future<void> _keepLocalAudio() async {
     final recording = _localRecording;
     if (recording == null || _audioRetained) return;
@@ -162,6 +248,11 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
         title: const Text('Transcript Detail'),
         leading: BackButton(onPressed: widget.onBack),
         actions: [
+          IconButton(
+            onPressed: _editSummary,
+            tooltip: 'Edit summary',
+            icon: const Icon(Icons.edit_outlined),
+          ),
           IconButton(
             onPressed: _deleteSummary,
             tooltip: 'Delete summary',
@@ -240,7 +331,7 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
           if (_summary.actionItems.isNotEmpty)
             _listSection('Action Items', _summary.actionItems),
           if (_summary.keywords.isNotEmpty)
-            _listSection('Keywords', _summary.keywords),
+            _listSection('Main Topics', _summary.keywords),
           if (_summary.category != null)
             Text(
               'Category: ${_summary.category}',

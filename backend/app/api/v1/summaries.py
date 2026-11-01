@@ -145,7 +145,12 @@ def update_summary(
     db: Session = Depends(get_db),
 ):
     summary, transcript, audio, event = _owned_summary(db, current_user, summary_id)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    values = payload.model_dump(exclude_unset=True)
+    transcript_text = values.pop("transcript_text", None)
+    if transcript_text is not None:
+        transcript.corrected_transcript = transcript_text
+        transcript.text = transcript_text
+    for field, value in values.items():
         setattr(summary, field, value)
     db.commit()
     db.refresh(summary)

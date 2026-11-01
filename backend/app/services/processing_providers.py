@@ -89,9 +89,12 @@ class OllamaLlmProvider:
         "Create a faithful structured summary of the Thai transcript. Do not "
         "invent facts or omit important information. Return JSON only with "
         "summary, key_points, action_items, keywords, category, mood, and "
-        "action_status. Use empty arrays when there are no items. mood must be "
-        "Positive, Neutral, or Negative. action_status must be Pending, "
-        "Completed, or No Action."
+        "action_status. The keywords field must contain the main topics of "
+        "the recording as concise topic phrases, not isolated words or "
+        "incidental terms. Include only topics supported by the transcript. "
+        "Use empty arrays when there are no key points, action items, or main "
+        "topics. mood must be Positive, Neutral, or Negative. action_status "
+        "must be Pending, Completed, or No Action."
     )
 
     def __init__(

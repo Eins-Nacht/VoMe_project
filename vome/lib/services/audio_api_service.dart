@@ -354,6 +354,7 @@ class AudioApiService {
 
   Future<RemoteSummary> updateSummary(
     int id, {
+    String? transcriptText,
     String? summary,
     List<String>? keyPoints,
     List<String>? actionItems,
@@ -366,6 +367,7 @@ class AudioApiService {
       _uri('/summaries/$id'),
       headers: {..._headers, 'Content-Type': 'application/json'},
       body: jsonEncode({
+        if (transcriptText != null) 'transcript_text': transcriptText,
         if (summary != null) 'summary': summary,
         if (keyPoints != null) 'key_points': keyPoints,
         if (actionItems != null) 'action_items': actionItems,

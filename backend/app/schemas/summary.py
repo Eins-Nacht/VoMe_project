@@ -31,6 +31,7 @@ class SummaryResponse(BaseModel):
 
 
 class SummaryUpdate(BaseModel):
+    transcript_text: str | None = Field(default=None, min_length=1)
     summary: str | None = Field(default=None, min_length=1)
     key_points: list[str] | None = None
     action_items: list[str] | None = None
@@ -39,7 +40,7 @@ class SummaryUpdate(BaseModel):
     mood: Mood | None = None
     action_status: ActionStatus | None = None
 
-    @field_validator("summary", "category")
+    @field_validator("transcript_text", "summary", "category")
     @classmethod
     def reject_blank_strings(cls, value: str | None) -> str | None:
         if value is not None and not value.strip():
