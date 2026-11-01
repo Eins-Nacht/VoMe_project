@@ -1,5 +1,8 @@
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
+import logging
+from pathlib import Path
 
 from app.models import (
     AudioRecord,
@@ -15,7 +18,10 @@ from app.services.processing_providers import (
     MockLlmProvider,
     MockSttProvider,
     SttProvider,
+    TranscriptResult,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ProcessingService:
@@ -33,6 +39,10 @@ class ProcessingService:
         self.storage_service = storage_service or AudioStorageService()
 
     def run(self, job_id: int) -> None:
+        self.run_transcription(job_id)
+
+    def run_transcription(self, job_id: int) -> None:
+        audio_path = None
         with self.session_factory() as db:
             job = db.get(ProcessingJob, job_id)
             if job is None or job.status != ProcessingStatus.PENDING:
@@ -46,6 +56,8 @@ class ProcessingService:
                 audio = db.get(AudioRecord, job.audio_record_id)
                 if audio is None:
                     raise ValueError("Audio record no longer exists")
+                if audio.file_path is None:
+                    raise FileNotFoundError("Temporary audio file is missing")
                 audio_path = self.storage_service.resolve(audio.file_path)
                 if not audio_path.is_file():
                     raise FileNotFoundError("Audio file is missing")
@@ -64,29 +76,13 @@ class ProcessingService:
                 db.add(transcript)
                 db.flush()
                 db.commit()
-
-                try:
-                    summary_result = self.llm_provider.summarize(transcript_result)
-                except Exception:
-                    if self._is_cancelled(db, job_id):
-                        return
-                    job.status = ProcessingStatus.COMPLETED
-                    job.transcription_status = TranscriptionStatus.SUCCESS
-                    job.error_message = "Transcript completed; summary unavailable"
-                    db.commit()
-                    return
-
-                if self._is_cancelled(db, job_id):
-                    return
-                summary = transcript.summary or Summary(transcript=transcript)
-                summary.summary = summary_result.summary
-                summary.key_points = summary_result.key_points
-                summary.action_items = summary_result.action_items
-                summary.keywords = summary_result.keywords
-                summary.category = summary_result.category
-                summary.mood = summary_result.mood
-                summary.action_status = summary_result.action_status
-                db.add(summary)
+                if audio_path is not None:
+                    self._cleanup_temporary_audio(
+                        job.audio_record_id,
+                        job_id,
+                        audio_path,
+                    )
+                    audio_path = None
                 job.status = ProcessingStatus.COMPLETED
                 job.transcription_status = TranscriptionStatus.SUCCESS
                 db.commit()
@@ -98,6 +94,94 @@ class ProcessingService:
                     failed_job.transcription_status = TranscriptionStatus.FAILED
                     failed_job.error_message = "Audio processing failed"
                     db.commit()
+            finally:
+                if audio_path is not None:
+                    self._cleanup_temporary_audio(
+                        job.audio_record_id,
+                        job_id,
+                        audio_path,
+                    )
+
+    def generate_summary(self, job_id: int) -> Summary:
+        with self.session_factory() as db:
+            job = db.get(ProcessingJob, job_id)
+            if job is None:
+                raise ValueError("Processing job not found")
+            if job.status != ProcessingStatus.COMPLETED:
+                raise ValueError("Transcription has not completed")
+            transcript = db.scalar(
+                select(Transcript).where(
+                    Transcript.audio_record_id == job.audio_record_id
+                )
+            )
+            if transcript is None or not transcript.text.strip():
+                raise ValueError("A non-empty transcript is required")
+            if transcript.summary is not None:
+                return transcript.summary
+
+            summary_result = self.llm_provider.summarize(
+                TranscriptResult(
+                    text=transcript.text,
+                    language=transcript.language,
+                )
+            )
+            summary = Summary(
+                transcript=transcript,
+                summary=summary_result.summary,
+                key_points=summary_result.key_points,
+                action_items=summary_result.action_items,
+                keywords=summary_result.keywords,
+                category=summary_result.category,
+                mood=summary_result.mood,
+                action_status=summary_result.action_status,
+            )
+            db.add(summary)
+            try:
+                db.commit()
+            except IntegrityError:
+                db.rollback()
+                existing = db.scalar(
+                    select(Summary).where(
+                        Summary.transcript_id == transcript.id
+                    )
+                )
+                if existing is None:
+                    raise
+                return existing
+            db.refresh(summary)
+            return summary
+
+    def _cleanup_temporary_audio(
+        self,
+        audio_record_id: int,
+        job_id: int,
+        audio_path: Path,
+    ) -> None:
+        try:
+            audio_path.unlink(missing_ok=True)
+        except OSError:
+            logger.warning(
+                "Could not remove temporary audio for job %s",
+                job_id,
+                exc_info=True,
+            )
+            return
+
+        cleanup = self.session_factory()
+        try:
+            audio = cleanup.get(AudioRecord, audio_record_id)
+            if audio is not None:
+                audio.file_path = None
+                cleanup.commit()
+        except Exception:
+            cleanup.rollback()
+            logger.warning(
+                "Could not clear temporary audio reference for job %s",
+                job_id,
+                exc_info=True,
+            )
+        finally:
+            cleanup.close()
 
     def _is_cancelled(self, db: Session, job_id: int) -> bool:
         return (

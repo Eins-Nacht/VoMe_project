@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 
 class AudioRecord(UpdatedTimestampMixin, Base):
-    """Metadata for a server-side audio file; binary content is not stored."""
+    """Metadata for an audio file temporarily uploaded for processing."""
 
     __tablename__ = "audio_records"
     __table_args__ = (
@@ -31,7 +31,7 @@ class AudioRecord(UpdatedTimestampMixin, Base):
         ForeignKey("events.id", ondelete="CASCADE"), nullable=False, index=True
     )
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
-    file_path: Mapped[str] = mapped_column(String(1024), nullable=False, unique=True)
+    file_path: Mapped[str | None] = mapped_column(String(1024), unique=True)
     format: Mapped[str] = mapped_column(String(20), nullable=False)
     size: Mapped[int] = mapped_column(Integer, nullable=False)
     duration: Mapped[float | None] = mapped_column(Float)

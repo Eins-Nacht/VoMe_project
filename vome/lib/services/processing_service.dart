@@ -33,7 +33,8 @@ class ProcessingService {
   }
 
   Future<ProcessingResult> enqueue(Recording recording) async {
-    if (recording.status == 'Completed') {
+    if (recording.status == 'Completed' ||
+        recording.status == 'AwaitingDecision') {
       return const ProcessingResult.success();
     }
     if (!_trackedRecordings.add(recording.id)) {
@@ -138,6 +139,23 @@ class ProcessingService {
     return api.processingResult(int.parse(jobId));
   }
 
+  Future<RemoteSummary> generateSummary(Recording recording) async {
+    final api = _api;
+    final jobId = recording.processingJobId;
+    if (api == null || jobId == null) {
+      throw StateError('Transcript processing is not available.');
+    }
+    final summary = await api.generateSummary(int.parse(jobId));
+    await RecordingRepository.instance.updateProcessing(
+      recording.id,
+      status: 'Completed',
+      transcript: summary.transcriptText,
+      summaryJson: jsonEncode(summary.toJson()),
+      error: null,
+    );
+    return summary;
+  }
+
   Future<void> _poll(String recordingId, int jobId) async {
     try {
       final api = _api;
@@ -166,8 +184,8 @@ class ProcessingService {
           }
           await RecordingRepository.instance.updateProcessing(
             recordingId,
-            status: 'Completed',
-            summaryJson: jsonEncode(summary.toJson()),
+            status: 'AwaitingDecision',
+            transcript: summary.transcriptText,
             error: null,
           );
           return;

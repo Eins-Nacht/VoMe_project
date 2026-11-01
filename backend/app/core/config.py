@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     whisper_compute_type: str = "int8"
     whisper_language: str | None = None
     whisper_model_dir: str | None = None
+    temporary_audio_max_age_seconds: int = 24 * 60 * 60
     faster_whisper_model: str | None = None
     faster_whisper_compute_type: str | None = None
 

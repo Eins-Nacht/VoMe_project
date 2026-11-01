@@ -46,7 +46,9 @@ class ProcessingStatusScreen extends StatelessWidget {
                       onRetry: onRetry == null
                           ? null
                           : () => onRetry!(recording),
-                      onTap: recording.status == 'Completed'
+                      onTap:
+                          recording.status == 'Completed' ||
+                              recording.status == 'AwaitingDecision'
                           ? () => onCompletedTap?.call(recording)
                           : null,
                       onDelete: onDelete == null

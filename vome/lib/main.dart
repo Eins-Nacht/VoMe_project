@@ -11,6 +11,7 @@ import 'screens/processing_status_screen.dart';
 import 'screens/recording_detail_screen.dart';
 import 'screens/recording_screen.dart';
 import 'screens/upload_screen.dart';
+import 'screens/transcript_review_screen.dart';
 import 'services/audio_storage_service.dart';
 import 'services/auth_service.dart';
 import 'services/database_service.dart';
@@ -63,7 +64,7 @@ class AudiaryScope extends InheritedWidget {
   bool updateShouldNotify(AudiaryScope oldWidget) => false;
 }
 
-enum _AppScreen { login, home, recording, processing, detail }
+enum _AppScreen { login, home, recording, processing, review, detail }
 
 class AppRoot extends StatefulWidget {
   const AppRoot({super.key});
@@ -83,6 +84,7 @@ class _AppRootState extends State<AppRoot> with WidgetsBindingObserver {
   String? _summaryLoadError;
   String? _localStatsLoadError;
   RemoteSummary? _selectedSummary;
+  Recording? _selectedRecording;
   Key _historyRefreshKey = UniqueKey();
   int _dashboardLoadGeneration = 0;
 
@@ -224,7 +226,14 @@ class _AppRootState extends State<AppRoot> with WidgetsBindingObserver {
     try {
       final summary = await ProcessingService.instance.fetchResult(recording);
       if (summary != null && mounted) {
-        _openRecordingDetail(summary);
+        if (recording.status == 'AwaitingDecision') {
+          setState(() {
+            _selectedRecording = recording;
+            _screen = _AppScreen.review;
+          });
+        } else {
+          _openRecordingDetail(summary);
+        }
       }
     } catch (error) {
       if (mounted) {
@@ -260,6 +269,7 @@ class _AppRootState extends State<AppRoot> with WidgetsBindingObserver {
   void _openRecordingDetail(RemoteSummary summary) {
     setState(() {
       _selectedSummary = summary;
+      _selectedRecording = null;
       _screen = _AppScreen.detail;
     });
   }
@@ -267,6 +277,7 @@ class _AppRootState extends State<AppRoot> with WidgetsBindingObserver {
   void _closeRecordingDetail() {
     setState(() {
       _selectedSummary = null;
+      _selectedRecording = null;
       _screen = _AppScreen.home;
     });
     _refreshData();
@@ -305,6 +316,15 @@ class _AppRootState extends State<AppRoot> with WidgetsBindingObserver {
           onDelete: _deleteProcessing,
           onCompletedTap: _openCompletedProcessing,
         ),
+        _AppScreen.review when _selectedRecording != null =>
+          TranscriptReviewScreen(
+            recording: _selectedRecording!,
+            onBack: _closeRecordingDetail,
+            onSummaryReady: (summary) async {
+              _openRecordingDetail(summary);
+              _refreshData();
+            },
+          ),
         _AppScreen.detail when _selectedSummary != null =>
           RecordingDetailScreen(
             summary: _selectedSummary!,

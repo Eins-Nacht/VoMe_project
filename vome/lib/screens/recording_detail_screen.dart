@@ -1,8 +1,7 @@
-import 'dart:typed_data';
-
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 
+import '../models/recording.dart';
 import '../services/audio_api_service.dart';
 import '../services/remote_summary_service.dart';
 import '../services/recording_repository.dart';
@@ -29,14 +28,29 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
   bool _playing = false;
   bool _saving = false;
   bool _deleting = false;
-  Uint8List? _audioBytes;
+  bool _audioRetained = false;
+  Recording? _localRecording;
 
   @override
   void initState() {
     super.initState();
     _summary = widget.summary;
+    _loadLocalRecording();
     _player.onPlayerStateChanged.listen((state) {
       if (mounted) setState(() => _playing = state == PlayerState.playing);
+    });
+  }
+
+  Future<void> _loadLocalRecording() async {
+    final id = _summary.clientRecordingId;
+    if (id == null) return;
+    final recording = await RecordingRepository.instance.getRecordingById(id);
+    if (!mounted) return;
+    setState(() {
+      _localRecording = recording;
+      _audioRetained =
+          recording?.audioRetained == true &&
+          recording != null;
     });
   }
 
@@ -52,15 +66,42 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
         await _player.pause();
         return;
       }
-      _audioBytes ??= await RemoteSummaryService.instance.api!.download(
-        _summary.audioRecordId,
+      final recording = _localRecording;
+      if (recording == null || !_audioRetained) {
+        throw StateError('The original audio is not retained on this device.');
+      }
+      await _player.play(
+        DeviceFileSource(
+          RecordingRepository.instance
+              .toAbsoluteAudioPath(recording.audioPath),
+        ),
       );
-      await _player.play(BytesSource(_audioBytes!));
     } catch (error) {
       if (mounted)
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('$error')));
+    }
+
+  }
+
+  Future<void> _deleteLocalAudio() async {
+    final recording = _localRecording;
+    if (recording == null || !_audioRetained) return;
+    try {
+      await RecordingRepository.instance.removeLocalAudio(recording);
+      if (mounted) {
+        setState(() => _audioRetained = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Original audio deleted from device.')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$error')));
+      }
     }
   }
 
@@ -174,12 +215,33 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
         ),
         const SizedBox(height: 16),
         FilledButton.icon(
-          onPressed: _play,
+          onPressed: _audioRetained ? _play : null,
           icon: Icon(_playing ? Icons.pause : Icons.play_arrow),
           label: const Text('Play audio'),
         ),
         const SizedBox(height: 20),
+        Text(
+          _audioRetained
+              ? 'Original audio is retained on this device.'
+              : 'Original audio is not retained on this device.',
+          style: const TextStyle(color: Colors.grey),
+        ),
+        if (_audioRetained)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              onPressed: _deleteLocalAudio,
+              child: const Text('Delete original audio from device'),
+            ),
+          ),
         _section('Summary', _summary.summary),
+        if (_summary.transcriptText != null)
+          _section('Transcript', _summary.transcriptText!),
+        if (_summary.transcriptLanguage != null)
+          Text(
+            'Detected language: ${_summary.transcriptLanguage}',
+            style: const TextStyle(color: Colors.grey),
+          ),
         _listSection('Key Points', _summary.keyPoints),
         _listSection('Action Items', _summary.actionItems),
         _listSection('Keywords', _summary.keywords),

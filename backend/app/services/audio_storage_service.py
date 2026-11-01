@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -43,3 +44,15 @@ class AudioStorageService:
         path = self.resolve(relative_path)
         if path.exists():
             path.unlink()
+
+    def cleanup_stale(self, max_age_seconds: int) -> int:
+        if not self.root.exists():
+            return 0
+        cutoff = datetime.now(timezone.utc).timestamp() - max_age_seconds
+        removed = 0
+        for path in self.root.iterdir():
+            if not path.is_file() or path.stat().st_mtime >= cutoff:
+                continue
+            path.unlink()
+            removed += 1
+        return removed

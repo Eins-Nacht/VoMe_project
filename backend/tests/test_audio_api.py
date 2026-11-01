@@ -60,7 +60,8 @@ def test_upload_persists_metadata_and_file(audio_client):
     assert body["filename"] == "sample.mp3"
     assert body["format"] == "mp3"
     assert body["size"] == len(b"audio data")
-    assert (storage.root / body["audio_path"]).read_bytes() == b"audio data"
+    assert body["audio_path"] is None
+    assert [path.read_bytes() for path in storage.root.glob("*")] == [b"audio data"]
 
 
 def test_list_details_and_download_are_owned(audio_client):
@@ -76,9 +77,7 @@ def test_list_details_and_download_are_owned(audio_client):
     assert listed.status_code == 200
     assert [item["id"] for item in listed.json()] == [record_id]
     assert detail.json()["id"] == record_id
-    assert downloaded.status_code == 200
-    assert downloaded.content == b"audio data"
-    assert downloaded.headers["content-type"] == "audio/mpeg"
+    assert downloaded.status_code == 410
 
 
 def test_invalid_extension_and_oversized_file_are_rejected(audio_client, monkeypatch):
@@ -103,7 +102,7 @@ def test_ownership_protects_records_and_deletion_removes_file(audio_client):
     event_id = create_event(audio_client, "first@example.com")
     created = upload(audio_client, owner_headers, event_id)
     record_id = created.json()["id"]
-    path = storage.root / created.json()["audio_path"]
+    path = next(storage.root.glob("*"))
 
     other_headers = register_and_login(audio_client, "second@example.com")
     assert audio_client.get(f"/api/v1/audio/{record_id}", headers=other_headers).status_code == 404
@@ -114,7 +113,7 @@ def test_ownership_protects_records_and_deletion_removes_file(audio_client):
     deleted = audio_client.delete(f"/api/v1/audio/{record_id}", headers=owner_headers)
     assert deleted.status_code == 204
     assert not path.exists()
-    assert audio_client.get(f"/api/v1/audio/{record_id}", headers=owner_headers).status_code == 404
+    assert audio_client.get(f"/api/v1/audio/{record_id}", headers=owner_headers).status_code == 200
 
 
 def test_deletion_succeeds_when_file_is_already_missing(audio_client):
@@ -122,7 +121,7 @@ def test_deletion_succeeds_when_file_is_already_missing(audio_client):
     event_id = create_event(audio_client, "missing-file@example.com")
     created = upload(audio_client, headers, event_id)
     record_id = created.json()["id"]
-    (storage.root / created.json()["audio_path"]).unlink()
+    next(storage.root.glob("*")).unlink()
 
     response = audio_client.delete(f"/api/v1/audio/{record_id}", headers=headers)
 

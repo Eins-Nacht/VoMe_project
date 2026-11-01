@@ -15,6 +15,8 @@ class SummaryResponse(BaseModel):
     event_id: int
     event_title: str
     audio_filename: str
+    transcript_text: str | None
+    transcript_language: str | None
     summary: str
     key_points: list[str] | None
     action_items: list[str] | None

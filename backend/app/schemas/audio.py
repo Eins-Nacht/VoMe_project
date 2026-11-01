@@ -12,7 +12,7 @@ class AudioRecordResponse(BaseModel):
     format: str
     size: int
     duration: float | None
-    audio_path: str
+    audio_path: str | None
     created_at: datetime
     updated_at: datetime
     client_recording_id: str | None = None

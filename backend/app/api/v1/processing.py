@@ -9,6 +9,7 @@ from app.infrastructure.database import SessionLocal, get_db
 from app.models import AudioRecord, Event, ProcessingJob, ProcessingStatus, User
 from app.models.transcript import Transcript
 from app.schemas.processing import ProcessingJobResponse, ProcessingResultResponse
+from app.services.audio_storage_service import AudioStorageError
 from app.services.processing_service import ProcessingService
 from app.core.config import get_settings
 from app.services.processing_providers import get_configured_providers
@@ -41,7 +42,36 @@ def _run_job(job_id: int, session_factory, storage_service) -> None:
         return
     service.stt_provider = stt_provider
     service.llm_provider = llm_provider
-    service.run(job_id)
+    service.run_transcription(job_id)
+
+
+def _result_response(job: ProcessingJob) -> ProcessingResultResponse:
+    transcript = job.audio_record.transcript
+    summary = transcript.summary if transcript else None
+    return ProcessingResultResponse(
+        id=job.id,
+        audio_record_id=job.audio_record_id,
+        status=job.status,
+        transcription_status=job.transcription_status,
+        error_message=job.error_message,
+        created_at=job.created_at,
+        updated_at=job.updated_at,
+        audio=audio_response(job.audio_record),
+        event_title=job.audio_record.event.title,
+        event_category=job.audio_record.event.category,
+        transcript_text=transcript.text if transcript else None,
+        transcript_language=transcript.language if transcript else None,
+        summary=summary.summary if summary else None,
+        key_points=summary.key_points if summary else None,
+        action_items=summary.action_items if summary else None,
+        keywords=summary.keywords if summary else None,
+        category=summary.category if summary else None,
+        mood=summary.mood.value if summary and summary.mood else None,
+        action_status=summary.action_status.value
+        if summary and summary.action_status
+        else None,
+        message=job.error_message,
+    )
 
 
 @router.post(
@@ -126,6 +156,15 @@ def cancel_processing(
             status_code=status.HTTP_409_CONFLICT,
             detail="Only active processing jobs can be cancelled",
         )
+    if job.status == ProcessingStatus.PENDING and job.audio_record.file_path is not None:
+        try:
+            storage.delete(job.audio_record.file_path)
+        except (AudioStorageError, OSError):
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Could not remove temporary audio file",
+            ) from None
+        job.audio_record.file_path = None
     job.status = ProcessingStatus.CANCELLED
     job.error_message = "Processing cancelled by user"
     db.commit()
@@ -160,29 +199,83 @@ def get_processing_result(
             detail="Processing has not completed",
         )
 
-    transcript = job.audio_record.transcript
-    summary = transcript.summary if transcript else None
-    return ProcessingResultResponse(
-        id=job.id,
-        audio_record_id=job.audio_record_id,
-        status=job.status,
-        transcription_status=job.transcription_status,
-        error_message=job.error_message,
-        created_at=job.created_at,
-        updated_at=job.updated_at,
-        audio=audio_response(job.audio_record),
-        event_title=job.audio_record.event.title,
-        event_category=job.audio_record.event.category,
-        transcript_text=transcript.text if transcript else None,
-        transcript_language=transcript.language if transcript else None,
-        summary=summary.summary if summary else None,
-        key_points=summary.key_points if summary else None,
-        action_items=summary.action_items if summary else None,
-        keywords=summary.keywords if summary else None,
-        category=summary.category if summary else None,
-        mood=summary.mood.value if summary and summary.mood else None,
-        action_status=summary.action_status.value
-        if summary and summary.action_status
-        else None,
-        message=job.error_message,
+    return _result_response(job)
+
+
+@router.post("/{job_id}/summary", response_model=ProcessingResultResponse)
+def generate_summary(
+    job_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    job = _owned_job(db, current_user, job_id)
+    return _generate_summary_for_job(job, request, current_user, db)
+
+
+@router.post(
+    "/audio/{audio_record_id}/summary",
+    response_model=ProcessingResultResponse,
+)
+def generate_audio_summary(
+    audio_record_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    job = db.scalar(
+        select(ProcessingJob)
+        .join(ProcessingJob.audio_record)
+        .join(AudioRecord.event)
+        .where(
+            AudioRecord.id == audio_record_id,
+            Event.user_id == current_user.id,
+        )
     )
+    if job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Processing job not found",
+        )
+    return _generate_summary_for_job(job, request, current_user, db)
+
+
+def _generate_summary_for_job(
+    job: ProcessingJob,
+    request: Request,
+    current_user: User,
+    db: Session,
+) -> ProcessingResultResponse:
+    if job.status != ProcessingStatus.COMPLETED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Transcription has not completed",
+        )
+    session_factory = getattr(request.app.state, "testing_session", SessionLocal)
+    service = ProcessingService(session_factory)
+    try:
+        stt_provider, llm_provider = get_configured_providers(get_settings())
+        service.stt_provider = stt_provider
+        service.llm_provider = llm_provider
+        service.generate_summary(job.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Summary generation failed") from exc
+
+    db.expire_all()
+    completed = _owned_job(db, current_user, job.id)
+    completed = db.scalar(
+        select(ProcessingJob)
+        .options(
+            joinedload(ProcessingJob.audio_record)
+            .joinedload(AudioRecord.event),
+            joinedload(ProcessingJob.audio_record)
+            .joinedload(AudioRecord.transcript)
+            .joinedload(Transcript.summary),
+        )
+        .where(ProcessingJob.id == job.id)
+    )
+    return _result_response(completed)

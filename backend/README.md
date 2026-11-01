@@ -1,8 +1,13 @@
 # VoMe backend processing
 
 Processing runs through the existing authenticated FastAPI API and
-`ProcessingJob` database model. Audio remains in the configured filesystem
-storage; the database stores metadata, transcripts, and summaries only.
+`ProcessingJob` database model. Uploaded audio is stored only temporarily
+while Faster-Whisper reads it; the database stores metadata, transcripts, and
+summaries, never permanent audio binaries.
+
+Temporary audio is removed in a processing `finally` block after transcription
+and on cancellation before processing starts. Files older than
+`TEMPORARY_AUDIO_MAX_AGE_SECONDS` are removed during backend startup.
 
 ## Provider configuration
 
@@ -36,9 +41,11 @@ decoding. GPU execution requires a compatible CUDA runtime and corresponding
 Faster-Whisper/CTranslate2 setup; CPU is the configured default.
 
 The OpenAI key is only read by the backend and is never sent to Flutter or
-included in API responses. A successful transcript is committed before
-summarization. If the LLM fails, the job remains completed, the transcript is
-available, and `error_message` explains that the summary is unavailable.
+included in API responses. A successful transcript is committed before the processing request completes.
+The client then calls `POST /api/v1/processing/{job_id}/summary` (or
+`POST /api/v1/processing/audio/{audio_record_id}/summary`) after the local
+audio retention decision. If the LLM fails, the transcript remains available
+and the summary request can be retried without uploading audio again.
 
 Completed jobs also expose `transcription_status`:
 

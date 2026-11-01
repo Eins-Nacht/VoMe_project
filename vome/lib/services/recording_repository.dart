@@ -153,6 +153,19 @@ class RecordingRepository {
     });
   }
 
+  Future<void> retainLocalAudio(Recording recording) async {
+    if (!await AudioStorageService.instance.fileExists(recording.audioPath)) {
+      throw StateError('The local audio file is unavailable.');
+    }
+    await DatabaseService.instance.updateRecording(recording.id, {
+      'audio_retained': 1,
+    });
+  }
+
+  String toAbsoluteAudioPath(String relativePath) {
+    return AudioStorageService.instance.absolutePath(relativePath);
+  }
+
   Future<void> updateSummary(String id, String? summaryJson) {
     return DatabaseService.instance.updateRecording(id, {
       'summary_json': summaryJson,

@@ -22,7 +22,7 @@ class RemoteAudioRecord {
   final String format;
   final int size;
   final double? duration;
-  final String audioPath;
+  final String? audioPath;
   final String? clientRecordingId;
 
   const RemoteAudioRecord({
@@ -44,7 +44,7 @@ class RemoteAudioRecord {
         format: json['format'] as String,
         size: json['size'] as int,
         duration: (json['duration'] as num?)?.toDouble(),
-        audioPath: json['audio_path'] as String,
+        audioPath: json['audio_path'] as String?,
         clientRecordingId: json['client_recording_id'] as String?,
       );
 }
@@ -104,6 +104,8 @@ class RemoteSummary {
   final String? actionStatus;
   final String? transcriptionStatus;
   final String? message;
+  final String? transcriptText;
+  final String? transcriptLanguage;
 
   const RemoteSummary({
     required this.id,
@@ -121,6 +123,8 @@ class RemoteSummary {
     this.actionStatus,
     this.transcriptionStatus,
     this.message,
+    this.transcriptText,
+    this.transcriptLanguage,
   });
 
   factory RemoteSummary.fromJson(Map<String, dynamic> json) => RemoteSummary(
@@ -139,6 +143,8 @@ class RemoteSummary {
     actionStatus: json['action_status'] as String?,
     transcriptionStatus: json['transcription_status'] as String?,
     message: json['message'] as String?,
+    transcriptText: json['transcript_text'] as String?,
+    transcriptLanguage: json['transcript_language'] as String?,
   );
 
   factory RemoteSummary.fromProcessingResult(Map<String, dynamic> json) {
@@ -160,6 +166,8 @@ class RemoteSummary {
       actionStatus: json['action_status'] as String?,
       transcriptionStatus: json['transcription_status'] as String?,
       message: json['message'] as String?,
+      transcriptText: json['transcript_text'] as String?,
+      transcriptLanguage: json['transcript_language'] as String?,
     );
   }
 
@@ -179,6 +187,8 @@ class RemoteSummary {
     'action_status': actionStatus,
     'transcription_status': transcriptionStatus,
     'message': message,
+    'transcript_text': transcriptText,
+    'transcript_language': transcriptLanguage,
   };
 }
 
@@ -284,6 +294,15 @@ class AudioApiService {
 
   Future<RemoteSummary> processingResult(int jobId) async {
     final response = await _get('/processing/$jobId/result');
+    _checkResponse(response);
+    return RemoteSummary.fromProcessingResult(_decodeJson(response));
+  }
+
+  Future<RemoteSummary> generateSummary(int jobId) async {
+    final response = await _client.post(
+      _uri('/processing/$jobId/summary'),
+      headers: _headers,
+    );
     _checkResponse(response);
     return RemoteSummary.fromProcessingResult(_decodeJson(response));
   }

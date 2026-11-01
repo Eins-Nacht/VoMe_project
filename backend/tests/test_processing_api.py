@@ -7,6 +7,7 @@ from app.models import (
     Event,
     ProcessingJob,
     ProcessingStatus,
+    Transcript,
     User,
 )
 from app.models.processing_job import TranscriptionStatus
@@ -51,7 +52,7 @@ def upload(client, headers, event_id):
     )
 
 
-def test_processing_creates_transcript_and_summary(client, tmp_path):
+def test_processing_creates_transcript_without_summary(client, tmp_path):
     storage.root = tmp_path / "audio"
     headers = register_and_login(client, "processing@example.com")
     event_id = create_event(client, "processing@example.com")
@@ -73,11 +74,86 @@ def test_processing_creates_transcript_and_summary(client, tmp_path):
     assert result.json()["transcription_status"] == "success"
     assert result.json()["message"] is None
     assert result.json()["transcript_text"] == "Mock transcript for sample.mp3"
-    assert result.json()["summary"] == "Mock summary: Mock transcript for sample.mp3"
+    assert result.json()["summary"] is None
     assert result.json()["event_title"] == "Processing event"
     assert result.json()["audio"]["filename"] == "sample.mp3"
-    assert result.json()["mood"] == "Neutral"
-    assert result.json()["action_status"] == "No Action"
+    assert result.json()["audio"]["audio_path"] is None
+    assert result.json()["mood"] is None
+    assert result.json()["action_status"] is None
+    db = client.app.state.testing_session()
+    try:
+        saved_audio = db.get(AudioRecord, audio["id"])
+        assert saved_audio.file_path is None
+        assert not list(storage.root.glob("*"))
+    finally:
+        db.close()
+
+
+def test_summary_generation_uses_persisted_transcript_and_is_idempotent(client, tmp_path):
+    storage.root = tmp_path / "audio"
+    headers = register_and_login(client, "summary-generation@example.com")
+    event_id = create_event(client, "summary-generation@example.com")
+    audio = upload(client, headers, event_id).json()
+    started = client.post(f"/api/v1/processing/audio/{audio['id']}", headers=headers)
+    job_id = started.json()["id"]
+
+    first = client.post(f"/api/v1/processing/{job_id}/summary", headers=headers)
+    second = client.post(f"/api/v1/processing/{job_id}/summary", headers=headers)
+
+    assert first.status_code == 200
+    assert first.json()["summary"] == "Mock summary: Mock transcript for sample.mp3"
+    assert second.status_code == 200
+    assert second.json()["id"] == first.json()["id"]
+
+
+def test_summary_generation_requires_transcription_and_ownership(client, tmp_path):
+    storage.root = tmp_path / "audio"
+    owner_headers = register_and_login(client, "summary-owner@example.com")
+    other_headers = register_and_login(client, "summary-other@example.com")
+    event_id = create_event(client, "summary-owner@example.com")
+    audio = upload(client, owner_headers, event_id).json()
+    started = client.post(f"/api/v1/processing/audio/{audio['id']}", headers=owner_headers)
+    job_id = started.json()["id"]
+
+    assert client.post(
+        f"/api/v1/processing/{job_id}/summary",
+        headers=other_headers,
+    ).status_code == 404
+
+    db = client.app.state.testing_session()
+    try:
+        job = db.get(ProcessingJob, job_id)
+        job.status = ProcessingStatus.PENDING
+        db.commit()
+    finally:
+        db.close()
+    assert client.post(
+        f"/api/v1/processing/{job_id}/summary",
+        headers=owner_headers,
+    ).status_code == 409
+
+
+def test_summary_generation_rejects_empty_persisted_transcript(client, tmp_path):
+    storage.root = tmp_path / "audio"
+    headers = register_and_login(client, "empty-transcript@example.com")
+    event_id = create_event(client, "empty-transcript@example.com")
+    audio = upload(client, headers, event_id).json()
+    started = client.post(f"/api/v1/processing/audio/{audio['id']}", headers=headers)
+    job_id = started.json()["id"]
+
+    db = client.app.state.testing_session()
+    try:
+        transcript = db.query(Transcript).filter_by(audio_record_id=audio["id"]).one()
+        transcript.text = " "
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.post(
+        f"/api/v1/processing/{job_id}/summary",
+        headers=headers,
+    )
+    assert response.status_code == 422
 
 
 def test_processing_prevents_duplicate_completed_job(client, tmp_path):
@@ -180,6 +256,11 @@ def test_processing_job_can_be_cancelled_by_owner(client, tmp_path):
     assert cancelled.status_code == 200
     assert cancelled.json()["status"] == "cancelled"
     assert cancelled.json()["error_message"] == "Processing cancelled by user"
+    db = client.app.state.testing_session()
+    try:
+        assert db.get(AudioRecord, audio["id"]).file_path is None
+    finally:
+        db.close()
 
 
 def test_processing_failure_is_recorded_and_can_be_retried(client, tmp_path):
@@ -222,7 +303,7 @@ def test_processing_failure_is_recorded_and_can_be_retried(client, tmp_path):
         assert failed.status is ProcessingStatus.FAILED
         assert failed.error_message == "Audio processing failed"
 
-        (storage.root / "missing.mp3").unlink()
+        assert not (storage.root / "missing.mp3").exists()
         ProcessingService(
             client.app.state.testing_session,
             storage_service=storage,
@@ -270,21 +351,30 @@ def test_transcript_is_retained_when_summary_fails(client, tmp_path):
             def summarize(self, transcript):
                 raise RuntimeError("summary provider unavailable")
 
-        ProcessingService(
+        service = ProcessingService(
             client.app.state.testing_session,
             stt_provider=SuccessfulStt(),
             llm_provider=FailingLlm(),
             storage_service=storage,
-        ).run(job.id)
+        )
+        service.run(job.id)
+        try:
+            service.generate_summary(job.id)
+        except RuntimeError as exc:
+            assert str(exc) == "summary provider unavailable"
+        else:
+            raise AssertionError("Summary generation unexpectedly succeeded")
 
         db.expire_all()
         saved_job = db.get(ProcessingJob, job.id)
         saved_audio = db.get(AudioRecord, audio.id)
         assert saved_job.status is ProcessingStatus.COMPLETED
-        assert saved_job.error_message == "Transcript completed; summary unavailable"
+        assert saved_job.error_message is None
         assert saved_audio.transcript.text == "real transcript"
         assert saved_audio.transcript.language == "en"
         assert saved_audio.transcript.summary is None
+        assert saved_audio.file_path is None
+        assert not list(storage.root.glob("*"))
     finally:
         db.close()
 

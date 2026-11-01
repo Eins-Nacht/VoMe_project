@@ -41,7 +41,13 @@ def create_summary(client, headers, event_id, filename="meeting.mp3"):
     )
     audio_id = upload.json()["id"]
     job = client.post(f"/api/v1/processing/audio/{audio_id}", headers=headers)
-    return job.json()["id"], audio_id
+    job_id = job.json()["id"]
+    summary = client.post(
+        f"/api/v1/processing/{job_id}/summary",
+        headers=headers,
+    )
+    assert summary.status_code == 200
+    return job_id, audio_id
 
 
 def test_summary_crud_and_related_retrieval(client, tmp_path):

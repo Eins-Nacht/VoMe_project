@@ -1,7 +1,6 @@
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -14,7 +13,6 @@ from app.schemas.audio import AudioRecordResponse
 from app.services.audio_storage_service import (
     ALLOWED_EXTENSIONS,
     CONTENT_TYPES,
-    RESPONSE_MEDIA_TYPES,
     AudioStorageError,
     AudioStorageService,
 )
@@ -32,7 +30,7 @@ def _response(record: AudioRecord) -> AudioRecordResponse:
         format=record.format,
         size=record.size,
         duration=record.duration,
-        audio_path=record.file_path,
+        audio_path=None,
         created_at=record.created_at,
         updated_at=record.updated_at,
         client_recording_id=record.client_recording_id,
@@ -87,7 +85,7 @@ async def upload_audio(
             while chunk := await file.read(CHUNK_SIZE):
                 size += len(chunk)
                 if size > get_settings().max_audio_size_bytes:
-                    raise HTTPException(status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail="Audio file exceeds the maximum size")
+                    raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Audio file exceeds the maximum size")
                 output.write(chunk)
     except HTTPException:
         destination.unlink(missing_ok=True)
@@ -147,16 +145,9 @@ def download_audio(
     db: Session = Depends(get_db),
 ):
     record = _owned_record(db, current_user, record_id)
-    try:
-        path = storage.resolve(record.file_path)
-    except AudioStorageError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audio file not found") from None
-    if not path.is_file():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audio file not found")
-    return FileResponse(
-        path,
-        media_type=RESPONSE_MEDIA_TYPES[record.format],
-        filename=record.filename,
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail="Original audio is temporary and is not retained by the backend",
     )
 
 
@@ -167,9 +158,10 @@ def delete_audio(
     db: Session = Depends(get_db),
 ):
     record = _owned_record(db, current_user, record_id)
-    try:
-        storage.delete(record.file_path)
-    except (AudioStorageError, OSError) as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not remove audio file") from exc
-    db.delete(record)
-    db.commit()
+    if record.file_path is not None:
+        try:
+            storage.delete(record.file_path)
+        except (AudioStorageError, OSError) as exc:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not remove temporary audio file") from exc
+        record.file_path = None
+        db.commit()
